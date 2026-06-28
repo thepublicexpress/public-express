@@ -1,0 +1,16 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # अगर फाइल या फोल्डर सच में मौजूद है, तो उसे डायरेक्ट खोलें
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    
+    # बाकी सभी रिक्वेस्ट को public फोल्डर के अंदर भेजें
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# php -- BEGIN cPanel-generated handler (लोकल पर इसे ऐसे ही रहने दें, कोई दिक्कत नहीं है)
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php83___lsphp .php .php8 .phtml
+</IfModule>
+# php -- END cPanel-generated handler
