@@ -21,7 +21,6 @@ body{font-family:"Noto Sans Devanagari",sans-serif;background:#f0f2f5;color:#1a2
 .sidebar-nav a:hover,.sidebar-nav a.active{background:rgba(229,57,53,.15);color:#ff6b6b;border-right:3px solid #e53935}
 .sidebar-nav .nav-group-title{padding:10px 20px 5px;font-size:11px;color:#718096;text-transform:uppercase;letter-spacing:1px}
 
-/* Submenu Styling for Settings */
 .sidebar-submenu {
     background: rgba(0, 0, 0, 0.2);
     padding-left: 15px;
@@ -31,10 +30,8 @@ body{font-family:"Noto Sans Devanagari",sans-serif;background:#f0f2f5;color:#1a2
     font-size: 13px;
 }
 
-/* Sidebar close button (mobile only) */
 .sidebar-close{display:none;position:absolute;top:12px;right:12px;background:rgba(255,255,255,.1);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;align-items:center;justify-content:center}
 
-/* ===== OVERLAY ===== */
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:150}
 .sidebar-overlay.active{display:block}
 
@@ -43,9 +40,25 @@ body{font-family:"Noto Sans Devanagari",sans-serif;background:#f0f2f5;color:#1a2
 .topbar-left{display:flex;align-items:center;gap:10px}
 .topbar-left img{height:32px;border-radius:6px}
 .topbar-left span{font-weight:700;color:#e53935;font-size:14px}
-
-/* Hamburger button */
 .menu-btn{display:none;background:none;border:none;font-size:20px;color:#e53935;cursor:pointer;padding:4px 8px;line-height:1}
+
+/* ===== NOTIFICATION BELL ===== */
+.notif-wrapper{position:relative;display:inline-block}
+.notif-bell{background:none;border:none;font-size:20px;color:#4a5568;cursor:pointer;padding:4px 6px;position:relative}
+.notif-badge{position:absolute;top:-4px;right:-4px;background:#e53e3e;color:#fff;border-radius:50%;padding:2px 6px;font-size:10px;font-weight:700;min-width:18px;text-align:center;line-height:1.2;border:2px solid #fff}
+.notif-dropdown{position:absolute;top:calc(100% + 8px);right:-10px;width:360px;max-height:420px;overflow-y:auto;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.15);border:1px solid #e2e8f0;display:none;z-index:1000}
+.notif-dropdown.show{display:block}
+.notif-item{padding:12px 16px;border-bottom:1px solid #f0f0f0;text-decoration:none;color:#1a202c;display:block;transition:background .15s}
+.notif-item:hover{background:#f7fafc}
+.notif-item.unread{background:#fef9e7}
+.notif-item .title{font-weight:600;font-size:14px}
+.notif-item .body{font-size:13px;color:#4a5568;margin:2px 0 4px}
+.notif-item .time{font-size:11px;color:#a0aec0}
+.notif-item .badge-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#e53935;margin-right:8px}
+.notif-empty{padding:20px;text-align:center;color:#a0aec0;font-size:14px}
+.notif-footer{padding:10px 16px;border-top:1px solid #e2e8f0;text-align:center}
+.notif-footer a{color:#e53935;font-weight:600;text-decoration:none;font-size:13px}
+.notif-footer a:hover{text-decoration:underline}
 
 /* ===== MAIN ===== */
 .main{margin-left:250px;padding-top:56px;min-height:100vh;transition:margin .3s ease}
@@ -76,14 +89,11 @@ body{font-family:"Noto Sans Devanagari",sans-serif;background:#f0f2f5;color:#1a2
 .btn-warning{background:#dd6b20;color:#fff}.btn-warning:hover{background:#c05621}
 .btn-sm{padding:5px 10px;font-size:12px}
 .btn-outline{background:transparent;border:1px solid currentColor}
-
-/* ===== TABLE - mobile scroll ===== */
 .table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse;min-width:600px}
 th,td{padding:10px 14px;text-align:left;border-bottom:1px solid #e2e8f0;font-size:13px}
 th{background:#f7fafc;font-weight:600;color:#4a5568;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
 tr:hover td{background:#f7fafc}
-
 .form-group{margin-bottom:16px}
 .form-group label{display:block;font-size:13px;font-weight:600;color:#4a5568;margin-bottom:6px}
 .form-control{width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;transition:.2s;font-family:inherit}
@@ -99,45 +109,29 @@ select.form-control{cursor:pointer}
 
 /* ===== MOBILE ===== */
 @media(max-width:768px){
-    /* Sidebar hidden by default on mobile */
     .sidebar{transform:translateX(-100%)}
     .sidebar.open{transform:translateX(0)}
     .sidebar-close{display:flex}
-
-    /* Topbar full width */
     .topbar{left:0}
     .menu-btn{display:block}
-
-    /* Main full width */
     .main{margin-left:0}
     .main-content{padding:12px}
-
-    /* Page header stack */
     .page-header{flex-direction:column;align-items:flex-start}
     .page-header h1{font-size:17px}
-
-    /* Stat grid 2 cols */
     .stat-grid{grid-template-columns:1fr 1fr;gap:10px}
     .stat-card{padding:12px}
     .stat-card .number{font-size:22px}
-
-    /* Card padding reduce */
     .card{padding:14px;border-radius:8px}
-
-    /* Buttons smaller */
     .btn{padding:7px 11px;font-size:12px}
-
-    /* Topbar user name hide on very small */
     .topbar-username{display:none}
-
-    /* Forms full width */
     .form-grid-2{grid-template-columns:1fr !important}
+    .notif-dropdown{width:300px;right:-20px}
 }
-
 @media(max-width:400px){
     .stat-grid{grid-template-columns:1fr 1fr}
     .stat-card .number{font-size:20px}
     .main-content{padding:10px}
+    .notif-dropdown{width:280px;right:-30px}
 }
 </style>
 @stack('styles')
@@ -175,6 +169,14 @@ select.form-control{cursor:pointer}
         <a href="{{ route('admin.withdrawals.index') }}" class="{{ request()->routeIs('admin.withdrawals.*') ? 'active' : '' }}" onclick="closeSidebar()">
             <i class="fas fa-wallet"></i> Withdrawals
         </a>
+
+        {{-- ============================================================ --}}
+        {{-- ✅ NEW: OPINION POLL GROUP --}}
+        {{-- ============================================================ --}}
+        <div class="nav-group-title">ओपिनियन पोल</div>
+        <a href="{{ route('admin.poll.results') }}" class="{{ request()->routeIs('admin.poll.results') ? 'active' : '' }}" onclick="closeSidebar()">
+            <i class="fas fa-chart-bar"></i> Poll Results
+        </a>
         
         <div class="nav-group-title">सेटअप</div>
         <a href="{{ route('admin.locations.states') }}" class="{{ request()->routeIs('admin.locations.states*') ? 'active' : '' }}" onclick="closeSidebar()">
@@ -192,7 +194,6 @@ select.form-control{cursor:pointer}
             <i class="fas fa-tags"></i> Categories
         </a>
         
-        <!-- अपडेटेड सेटिंग्स मेनू जो सीधे खुलेगा -->
         <a href="{{ route('admin.settings.site') }}" class="{{ request()->routeIs('admin.settings.site') ? 'active' : '' }}" onclick="closeSidebar()">
             <i class="fas fa-cog"></i> सामान्य सेटिंग्स
         </a>
@@ -226,6 +227,52 @@ select.form-control{cursor:pointer}
         <span>द पब्लिक एक्सप्रेस</span>
     </div>
     <div style="display:flex;align-items:center;gap:12px">
+        {{-- Notification Bell --}}
+        @php
+            $admin = auth()->user();
+            $unreadCount = \App\Models\Notification::where('user_id', $admin->id)->where('is_read', 0)->count();
+            $latestNotifs = \App\Models\Notification::where('user_id', $admin->id)
+                            ->orderBy('created_at', 'desc')
+                            ->limit(5)
+                            ->get();
+        @endphp
+
+        <div class="notif-wrapper" id="notifWrapper">
+            <button class="notif-bell" onclick="toggleNotif()" id="notifBell">
+                <i class="fas fa-bell"></i>
+                @if($unreadCount > 0)
+                    <span class="notif-badge">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
+                @endif
+            </button>
+            <div class="notif-dropdown" id="notifDropdown">
+                @if($latestNotifs->count())
+                    @foreach($latestNotifs as $notif)
+                        @php $data = json_decode($notif->data, true); @endphp
+                        <a href="{{ $data['url'] ?? '#' }}" class="notif-item {{ $notif->is_read ? '' : 'unread' }}" onclick="markRead({{ $notif->id }})">
+                            <div class="title">
+                                @if(!$notif->is_read) <span class="badge-dot"></span> @endif
+                                {{ $notif->title }}
+                            </div>
+                            <div class="body">{{ \Str::limit($notif->body, 80) }}</div>
+                            <div class="time">{{ $notif->created_at->diffForHumans() }}</div>
+                        </a>
+                    @endforeach
+                    <div class="notif-footer">
+                        <a href="{{ route('admin.notifications.index') }}">सभी सूचनाएँ देखें</a>
+                        @if($unreadCount > 0)
+                            <span style="margin:0 6px">|</span>
+                            <a href="#" onclick="markAllRead()" style="color:#718096;font-weight:400;">सभी पढ़ें</a>
+                        @endif
+                    </div>
+                @else
+                    <div class="notif-empty">
+                        <i class="fas fa-bell-slash" style="font-size:24px;display:block;margin-bottom:8px"></i>
+                        कोई सूचना नहीं
+                    </div>
+                @endif
+            </div>
+        </div>
+
         <span class="topbar-username" style="font-size:13px;color:#718096">
             <i class="fas fa-user-circle" style="color:#e53935"></i>
             {{ auth()->user()->name ?? 'Admin' }}
@@ -264,8 +311,42 @@ function closeSidebar(){
     document.getElementById('overlay').classList.remove('active');
     document.body.style.overflow='';
 }
-// Close on ESC
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSidebar()});
+
+// ===== NOTIFICATIONS =====
+function toggleNotif(){
+    document.getElementById('notifDropdown').classList.toggle('show');
+}
+document.addEventListener('click', function(e) {
+    const wrapper = document.getElementById('notifWrapper');
+    if (!wrapper.contains(e.target)) {
+        document.getElementById('notifDropdown').classList.remove('show');
+    }
+});
+
+function markRead(id){
+    fetch('{{ route("admin.notifications.mark-read", "") }}/' + id, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        }
+    }).then(() => {
+        window.location.reload();
+    });
+}
+
+function markAllRead(){
+    fetch('{{ route("admin.notifications.mark-all-read") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        }
+    }).then(() => {
+        window.location.reload();
+    });
+}
 </script>
 @stack('scripts')
 </body>

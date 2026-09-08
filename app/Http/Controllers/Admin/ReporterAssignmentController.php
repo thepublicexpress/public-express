@@ -1,242 +1,218 @@
 <?php
-// app/Http/Controllers/Admin/ReporterAssignmentController.php
 
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ReporterAssignment;
 use App\Models\User;
 use App\Models\State;
 use App\Models\District;
 use App\Models\Tehsil;
 use App\Models\Block;
-use App\Models\Category;
-use App\Models\ReporterAssignment;
+use App\Models\Category; // ✅ NewsCategory → Category
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class ReporterAssignmentController extends Controller
 {
-    /**
-     * Display all reporter assignments
-     */
     public function index(Request $request)
     {
-        $query = ReporterAssignment::with(['reporter', 'assignedState', 'assignedDistrict', 'assignedTehsil', 'assignedBlock', 'assignedCategory']);
+        try {
+            $query = ReporterAssignment::with([
+                'reporter', 'assignedState', 'assignedDistrict',
+                'assignedTehsil', 'assignedBlock', 'assignedCategory'
+            ]);
 
-        if ($request->filled('reporter_id')) {
-            $query->where('reporter_id', $request->reporter_id);
+            if ($request->filled('reporter_id')) {
+                $query->where('reporter_id', $request->reporter_id);
+            }
+
+            if ($request->filled('state_id')) {
+                $query->where('assigned_state_id', $request->state_id);
+            }
+
+            $assignments = $query->orderBy('assigned_at', 'desc')->paginate(20);
+
+            $reporters = User::whereIn('role', [
+                'reporter', 'state_reporter', 'district_reporter',
+                'tehsil_reporter', 'block_reporter', 'national_reporter'
+            ])->orderBy('name')->get();
+
+            $states = State::where('is_active', 1)->orderBy('name')->get();
+
+            return view('admin.reporter-assignments.index', compact('assignments', 'reporters', 'states'));
+
+        } catch (\Exception $e) {
+            Log::error('Reporter Assignment Index Error: ' . $e->getMessage());
+            return back()->with('error', 'Assignments लोड करने में समस्या आ रही है।');
         }
-
-        if ($request->filled('state_id')) {
-            $query->where('assigned_state_id', $request->state_id);
-        }
-
-        $assignments = $query->latest('assigned_at')->paginate(20);
-
-        $reporters = User::where('role', 'reporter')->where('is_active', true)->get();
-        $states = State::where('is_active', true)->get();
-        $districts = District::where('is_active', true)->get();
-        $tehsils = Tehsil::where('is_active', true)->get();
-        $blocks = Block::where('is_active', true)->get();
-        $categories = Category::where('is_active', true)->get();
-
-        return view('admin.reporter-assignments.index', compact(
-            'assignments', 'reporters', 'states', 'districts', 'tehsils', 'blocks', 'categories'
-        ));
     }
 
-    /**
-     * Show form to create new assignment
-     */
     public function create()
     {
-        $reporters = User::where('role', 'reporter')
-            ->where('is_active', true)
-            ->where('is_approved', true)
-            ->get();
-        $states = State::where('is_active', true)->get();
-        $categories = Category::where('is_active', true)->get();
+        try {
+            $reporters = User::whereIn('role', [
+                'reporter', 'state_reporter', 'district_reporter',
+                'tehsil_reporter', 'block_reporter', 'national_reporter'
+            ])->orderBy('name')->get();
 
-        return view('admin.reporter-assignments.create', compact('reporters', 'states', 'categories'));
+            $states = State::where('is_active', 1)->orderBy('name')->get();
+            $categories = Category::where('is_active', 1)->orderBy('order')->get(); // ✅ Category model, order by 'order'
+
+            return view('admin.reporter-assignments.create', compact('reporters', 'states', 'categories'));
+
+        } catch (\Exception $e) {
+            Log::error('Reporter Assignment Create Error: ' . $e->getMessage());
+            return back()->with('error', 'Form लोड करने में समस्या आ रही है।');
+        }
     }
 
-    /**
-     * Store new assignment
-     */
     public function store(Request $request)
     {
-        $request->validate([
-            'reporter_id' => 'required|exists:users,id',
-            'assigned_state_id' => 'nullable|exists:states,id',
-            'assigned_district_id' => 'nullable|exists:districts,id',
-            'assigned_tehsil_id' => 'nullable|exists:tehsils,id',
-            'assigned_block_id' => 'nullable|exists:blocks,id',
-            'assigned_category_id' => 'nullable|exists:categories,id',
-            'assigned_categories' => 'nullable|array',
-        ]);
+        try {
+            $request->validate([
+                'reporter_id' => 'required|exists:users,id',
+                'assigned_state_id' => 'nullable|exists:states,id',
+                'assigned_district_id' => 'nullable|exists:districts,id',
+                'assigned_tehsil_id' => 'nullable|exists:tehsils,id',
+                'assigned_block_id' => 'nullable|exists:blocks,id',
+                'assigned_category_id' => 'nullable|exists:news_categories,id', // ✅ table name remains 'news_categories'
+                'assigned_categories' => 'nullable|array',
+                'assigned_categories.*' => 'exists:news_categories,id',
+            ]);
 
-        // Check if assignment already exists
-        $existing = ReporterAssignment::where('reporter_id', $request->reporter_id)
-            ->where('is_active', true)
-            ->first();
+            $assignment = ReporterAssignment::create([
+                'reporter_id' => $request->reporter_id,
+                'assigned_by' => Auth::id(),
+                'assigned_state_id' => $request->assigned_state_id,
+                'assigned_district_id' => $request->assigned_district_id,
+                'assigned_tehsil_id' => $request->assigned_tehsil_id,
+                'assigned_block_id' => $request->assigned_block_id,
+                'assigned_category_id' => $request->assigned_category_id,
+                'assigned_categories' => $request->assigned_categories ?? [],
+                'is_active' => true,
+                'assigned_at' => now(),
+            ]);
 
-        if ($existing) {
-            return back()->with('error', 'This reporter already has an active assignment. Please deactivate it first.');
+            Log::info('Reporter assignment created', [
+                'assignment_id' => $assignment->id,
+                'reporter_id' => $request->reporter_id
+            ]);
+
+            return redirect()->route('admin.reporter-assignments.index')
+                ->with('success', '✅ Assignment created successfully!');
+
+        } catch (\Exception $e) {
+            Log::error('Reporter Assignment Store Error: ' . $e->getMessage());
+            return back()->with('error', 'Assignment बनाने में समस्या आ रही है।')->withInput();
         }
-
-        // Update user's assigned fields
-        $user = User::find($request->reporter_id);
-        $user->assigned_state_id = $request->assigned_state_id;
-        $user->assigned_district_id = $request->assigned_district_id;
-        $user->assigned_tehsil_id = $request->assigned_tehsil_id;
-        $user->assigned_block_id = $request->assigned_block_id;
-        $user->assigned_category_id = $request->assigned_category_id;
-        $user->assigned_categories = $request->assigned_categories ? json_encode($request->assigned_categories) : null;
-        $user->save();
-
-        // Create assignment record
-        ReporterAssignment::create([
-            'reporter_id' => $request->reporter_id,
-            'assigned_by' => auth()->id(),
-            'assigned_state_id' => $request->assigned_state_id,
-            'assigned_district_id' => $request->assigned_district_id,
-            'assigned_tehsil_id' => $request->assigned_tehsil_id,
-            'assigned_block_id' => $request->assigned_block_id,
-            'assigned_category_id' => $request->assigned_category_id,
-            'assigned_categories' => $request->assigned_categories ? json_encode($request->assigned_categories) : null,
-            'is_active' => true,
-            'assigned_at' => now(),
-        ]);
-
-        return redirect()->route('admin.reporter-assignments.index')
-            ->with('success', 'Reporter assigned successfully!');
     }
 
-    /**
-     * Show form to edit assignment
-     */
-    public function edit(ReporterAssignment $assignment)
+    public function edit($id)
     {
-        $reporters = User::where('role', 'reporter')->where('is_active', true)->get();
-        $states = State::where('is_active', true)->get();
-        $categories = Category::where('is_active', true)->get();
+        try {
+            $assignment = ReporterAssignment::findOrFail($id);
 
-        return view('admin.reporter-assignments.edit', compact('assignment', 'reporters', 'states', 'categories'));
-    }
+            $reporters = User::whereIn('role', [
+                'reporter', 'state_reporter', 'district_reporter',
+                'tehsil_reporter', 'block_reporter', 'national_reporter'
+            ])->orderBy('name')->get();
 
-    /**
-     * Update assignment
-     */
-    public function update(Request $request, ReporterAssignment $assignment)
-    {
-        $request->validate([
-            'reporter_id' => 'required|exists:users,id',
-            'assigned_state_id' => 'nullable|exists:states,id',
-            'assigned_district_id' => 'nullable|exists:districts,id',
-            'assigned_tehsil_id' => 'nullable|exists:tehsils,id',
-            'assigned_block_id' => 'nullable|exists:blocks,id',
-            'assigned_category_id' => 'nullable|exists:categories,id',
-            'assigned_categories' => 'nullable|array',
-        ]);
+            $states = State::where('is_active', 1)->orderBy('name')->get();
+            $categories = Category::where('is_active', 1)->orderBy('order')->get(); // ✅ Category model
 
-        // Update user's assigned fields
-        $user = User::find($request->reporter_id);
-        $user->assigned_state_id = $request->assigned_state_id;
-        $user->assigned_district_id = $request->assigned_district_id;
-        $user->assigned_tehsil_id = $request->assigned_tehsil_id;
-        $user->assigned_block_id = $request->assigned_block_id;
-        $user->assigned_category_id = $request->assigned_category_id;
-        $user->assigned_categories = $request->assigned_categories ? json_encode($request->assigned_categories) : null;
-        $user->save();
+            $districts = [];
+            if ($assignment->assigned_state_id) {
+                $districts = District::where('state_id', $assignment->assigned_state_id)
+                    ->where('is_active', 1)->orderBy('name')->get();
+            }
 
-        $assignment->update([
-            'reporter_id' => $request->reporter_id,
-            'assigned_state_id' => $request->assigned_state_id,
-            'assigned_district_id' => $request->assigned_district_id,
-            'assigned_tehsil_id' => $request->assigned_tehsil_id,
-            'assigned_block_id' => $request->assigned_block_id,
-            'assigned_category_id' => $request->assigned_category_id,
-            'assigned_categories' => $request->assigned_categories ? json_encode($request->assigned_categories) : null,
-            'updated_at' => now(),
-        ]);
+            $tehsils = [];
+            if ($assignment->assigned_district_id) {
+                $tehsils = Tehsil::where('district_id', $assignment->assigned_district_id)
+                    ->where('is_active', 1)->orderBy('name')->get();
+            }
 
-        return redirect()->route('admin.reporter-assignments.index')
-            ->with('success', 'Assignment updated successfully!');
-    }
+            $blocks = [];
+            if ($assignment->assigned_tehsil_id) {
+                $blocks = Block::where('tehsil_id', $assignment->assigned_tehsil_id)
+                    ->where('is_active', 1)->orderBy('name')->get();
+            }
 
-    /**
-     * Toggle assignment status
-     */
-    public function toggle(ReporterAssignment $assignment)
-    {
-        $assignment->is_active = !$assignment->is_active;
-        $assignment->save();
+            return view('admin.reporter-assignments.edit', compact(
+                'assignment', 'reporters', 'states', 'categories', 'districts', 'tehsils', 'blocks'
+            ));
 
-        // Also update user's assigned fields
-        $user = $assignment->reporter;
-        if (!$assignment->is_active) {
-            $user->assigned_state_id = null;
-            $user->assigned_district_id = null;
-            $user->assigned_tehsil_id = null;
-            $user->assigned_block_id = null;
-            $user->assigned_category_id = null;
-            $user->assigned_categories = null;
-            $user->save();
+        } catch (\Exception $e) {
+            Log::error('Reporter Assignment Edit Error: ' . $e->getMessage());
+            return redirect()->route('admin.reporter-assignments.index')->with('error', 'Assignment नहीं मिला।');
         }
-
-        $status = $assignment->is_active ? 'activated' : 'deactivated';
-        return back()->with('success', "Assignment {$status} successfully!");
     }
 
-    /**
-     * Delete assignment
-     */
-    public function destroy(ReporterAssignment $assignment)
+    public function update(Request $request, $id)
     {
-        // Remove user's assigned fields
-        $user = $assignment->reporter;
-        $user->assigned_state_id = null;
-        $user->assigned_district_id = null;
-        $user->assigned_tehsil_id = null;
-        $user->assigned_block_id = null;
-        $user->assigned_category_id = null;
-        $user->assigned_categories = null;
-        $user->save();
+        try {
+            $assignment = ReporterAssignment::findOrFail($id);
 
-        $assignment->delete();
+            $request->validate([
+                'reporter_id' => 'required|exists:users,id',
+                'assigned_state_id' => 'nullable|exists:states,id',
+                'assigned_district_id' => 'nullable|exists:districts,id',
+                'assigned_tehsil_id' => 'nullable|exists:tehsils,id',
+                'assigned_block_id' => 'nullable|exists:blocks,id',
+                'assigned_category_id' => 'nullable|exists:news_categories,id',
+                'assigned_categories' => 'nullable|array',
+                'assigned_categories.*' => 'exists:news_categories,id',
+            ]);
 
-        return back()->with('success', 'Assignment deleted successfully!');
+            $assignment->update([
+                'reporter_id' => $request->reporter_id,
+                'assigned_state_id' => $request->assigned_state_id,
+                'assigned_district_id' => $request->assigned_district_id,
+                'assigned_tehsil_id' => $request->assigned_tehsil_id,
+                'assigned_block_id' => $request->assigned_block_id,
+                'assigned_category_id' => $request->assigned_category_id,
+                'assigned_categories' => $request->assigned_categories ?? [],
+                'is_active' => $request->has('is_active'),
+            ]);
+
+            return redirect()->route('admin.reporter-assignments.index')
+                ->with('success', '✅ Assignment updated successfully!');
+
+        } catch (\Exception $e) {
+            Log::error('Reporter Assignment Update Error: ' . $e->getMessage());
+            return back()->with('error', 'Assignment अपडेट करने में समस्या आ रही है।')->withInput();
+        }
     }
 
-    /**
-     * Get districts by state (AJAX)
-     */
-    public function getDistricts($stateId)
+    public function toggle($id)
     {
-        $districts = District::where('state_id', $stateId)
-            ->where('is_active', true)
-            ->get(['id', 'name']);
-        return response()->json($districts);
+        try {
+            $assignment = ReporterAssignment::findOrFail($id);
+            $assignment->update(['is_active' => !$assignment->is_active]);
+
+            return redirect()->route('admin.reporter-assignments.index')
+                ->with('success', '✅ Assignment toggled successfully!');
+
+        } catch (\Exception $e) {
+            Log::error('Reporter Assignment Toggle Error: ' . $e->getMessage());
+            return back()->with('error', 'Assignment टॉगल करने में समस्या आ रही है।');
+        }
     }
 
-    /**
-     * Get tehsils by district (AJAX)
-     */
-    public function getTehsils($districtId)
+    public function destroy($id)
     {
-        $tehsils = Tehsil::where('district_id', $districtId)
-            ->where('is_active', true)
-            ->get(['id', 'name']);
-        return response()->json($tehsils);
-    }
+        try {
+            $assignment = ReporterAssignment::findOrFail($id);
+            $assignment->delete();
 
-    /**
-     * Get blocks by tehsil (AJAX)
-     */
-    public function getBlocks($tehsilId)
-    {
-        $blocks = Block::where('tehsil_id', $tehsilId)
-            ->where('is_active', true)
-            ->get(['id', 'name']);
-        return response()->json($blocks);
+            return redirect()->route('admin.reporter-assignments.index')
+                ->with('success', '✅ Assignment deleted successfully!');
+
+        } catch (\Exception $e) {
+            Log::error('Reporter Assignment Delete Error: ' . $e->getMessage());
+            return back()->with('error', 'Assignment डिलीट करने में समस्या आ रही है।');
+        }
     }
 }

@@ -34,7 +34,6 @@ class SettingsController extends Controller
             ]);
         }
 
-        // Stats for sidebar
         $totalReporters = User::whereIn('role', ['reporter', 'state_reporter', 'district_reporter', 'tehsil_reporter', 'block_reporter', 'national_reporter'])->count();
         $activeMonetisation = ReporterMonetisation::where('is_monetisation_active', true)->count();
         $totalPoints = User::sum('points');
@@ -104,6 +103,7 @@ class SettingsController extends Controller
     {
         $request->validate([
             'site_name' => 'nullable|string|max:255',
+            'meta_description' => 'nullable|string|max:500',
             'site_logo' => 'nullable|file|mimes:png,jpg,jpeg,webp|max:4096',
             'favicon' => 'nullable|file|mimes:png,ico,jpg,jpeg|max:512',
             'primary_color' => 'nullable|string|max:7',
@@ -119,6 +119,7 @@ class SettingsController extends Controller
         // Text Settings
         $textSettings = [
             'site_name' => $request->site_name,
+            'meta_description' => $request->meta_description,
             'primary_color' => $request->primary_color,
             'footer_text' => $request->footer_text,
             'facebook_url' => $request->facebook_url,
@@ -136,26 +137,44 @@ class SettingsController extends Controller
             );
         }
 
-        // Upload Logo
+        // ✅ Logo Upload to public/images/
         if ($request->hasFile('site_logo')) {
             try {
-                $logoPath = $request->file('site_logo')->store('settings', 'public');
+                $file = $request->file('site_logo');
+                $filename = 'logo_' . time() . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('images'), $filename);
+                
+                // Delete old logo if exists
+                $oldLogo = SiteSetting::where('key', 'site_logo')->first();
+                if ($oldLogo && $oldLogo->value && file_exists(public_path($oldLogo->value))) {
+                    unlink(public_path($oldLogo->value));
+                }
+                
                 SiteSetting::updateOrCreate(
                     ['key' => 'site_logo'],
-                    ['value' => $logoPath, 'type' => 'image', 'group' => 'general']
+                    ['value' => 'images/' . $filename, 'type' => 'image', 'group' => 'general']
                 );
             } catch (\Exception $e) {
                 return back()->with('error', 'Logo upload failed: ' . $e->getMessage());
             }
         }
 
-        // Upload Favicon
+        // ✅ Favicon Upload to public/images/
         if ($request->hasFile('favicon')) {
             try {
-                $faviconPath = $request->file('favicon')->store('settings', 'public');
+                $file = $request->file('favicon');
+                $filename = 'favicon_' . time() . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('images'), $filename);
+                
+                // Delete old favicon if exists
+                $oldFavicon = SiteSetting::where('key', 'favicon')->first();
+                if ($oldFavicon && $oldFavicon->value && file_exists(public_path($oldFavicon->value))) {
+                    unlink(public_path($oldFavicon->value));
+                }
+                
                 SiteSetting::updateOrCreate(
                     ['key' => 'favicon'],
-                    ['value' => $faviconPath, 'type' => 'image', 'group' => 'general']
+                    ['value' => 'images/' . $filename, 'type' => 'image', 'group' => 'general']
                 );
             } catch (\Exception $e) {
                 return back()->with('error', 'Favicon upload failed: ' . $e->getMessage());

@@ -140,11 +140,15 @@
                     </div>
                 </div>
 
-                <!-- Multiple Categories -->
+                <!-- Multiple Categories – FIXED -->
                 <div class="mb-3">
                     <label class="form-label">Assign Multiple Categories</label>
                     @php
-                        $assignedCats = old('assigned_categories', $assignment->assigned_categories ? json_decode($assignment->assigned_categories, true) : []);
+                        // ✅ Safe handling: if it's a string, decode; otherwise use as is
+                        $assignedCats = old('assigned_categories', $assignment->assigned_categories ?? []);
+                        if (is_string($assignedCats)) {
+                            $assignedCats = json_decode($assignedCats, true) ?? [];
+                        }
                     @endphp
                     <div class="row">
                         @foreach($categories as $category)

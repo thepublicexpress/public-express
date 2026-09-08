@@ -1,131 +1,342 @@
 <?php
 
-namespace App\Http\Controllers\Reporter;
+namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\News;
-use App\Models\Category;
+use App\Models\NewsCategory;
 use App\Models\State;
 use App\Models\District;
 use App\Models\Tehsil;
+use App\Models\Block;
+use App\Services\SEOService;
+use App\Services\AdService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
-class NewsController extends Controller
+class NewsPageController extends Controller
 {
-    public function index()
-    {
-        $news = News::where('user_id', auth()->id())
-            ->orderBy('id', 'desc')
-            ->paginate(10);
+    protected $seoService;
+    protected $adService;
 
-        return view('reporter.news.index', compact('news'));
+    public function __construct(SEOService $seoService, AdService $adService)
+    {
+        $this->seoService = $seoService;
+        $this->adService = $adService;
     }
 
-    public function create()
+    /**
+     * ✅ Show Single News Post with SEO and Ads
+     */
+    public function show($slug)
     {
-        // एडमिन पैनल द्वारा केवल चालू (Active) की गई कैटेगरीज और राज्य ही दिखाई देंगे
-        $categories = Category::where('is_active', true)->orderBy('name')->get();
-        $states = State::where('is_active', true)->orderBy('name')->get();
+        try {
+            // Get news with relations
+            $news = News::with(['user', 'category', 'state', 'district', 'tehsil', 'block'])
+                ->where('slug', $slug)
+                ->where('status', 'published')
+                ->firstOrFail();
 
-        return view('reporter.news.create', compact('categories', 'states'));
-    }
+            // Increment views
+            $news->increment('views');
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'title' => 'required|max:255',
-            'content' => 'required',
-            'category_id' => 'required',
-            'state_id' => 'required',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048'
-        ]);
+            // Get related news
+            $relatedNews = News::where('category_id', $news->category_id)
+                ->where('id', '!=', $news->id)
+                ->where('status', 'published')
+                ->orderBy('published_at', 'desc')
+                ->limit(5)
+                ->get();
 
-        $news = new News();
-        $news->title = $request->title;
-        $news->slug = Str::slug($request->title) . '-' . time();
-        $news->content = $request->content;
-        $news->summary = $request->summary;
-        $news->category_id = $request->category_id;
-        $news->state_id = $request->state_id;
-        $news->district_id = $request->district_id;
-        $news->tehsil_id = $request->tehsil_id;
-        $news->user_id = auth()->id();
-        $news->status = 'pending'; // रिपोर्टर की खबर पहले पेंडिंग रहेगी, एडमिन पास करेगा
+            // ✅ Get trending news for sidebar
+            $trendingNews = News::where('status', 'published')
+                ->orderBy('views', 'desc')
+                ->orderBy('published_at', 'desc')
+                ->limit(10)
+                ->get();
 
-        if ($request->hasFile('image')) {
-            $imagePath = $request->file('image')->store('news/' . date('Y/m'), 'public');
-            $news->image = $imagePath;
-        }
-
-        $news->save();
-
-        return redirect()->route('reporter.news.index')->with('success', 'खबर सफलतापूर्वक सुरक्षित कर दी गई है और अनुमति के लिए एडमिन के पास भेज दी गई है।');
-    }
-
-    public function edit($id)
-    {
-        $news = News::where('user_id', auth()->id())->findOrFail($id);
-        
-        // एडमिन पैनल द्वारा केवल चालू (Active) की गई कैटेगरीज और राज्य ही दिखाई देंगे
-        $categories = Category::where('is_active', true)->orderBy('name')->get();
-        $states = State::where('is_active', true)->orderBy('name')->get();
-        
-        // पुराने चुने हुए राज्य और जिले के आधार पर एक्टिव जिलें और तहसीलें
-        $districts = District::where('state_id', $news->state_id)->where('is_active', true)->orderBy('name')->get();
-        $tehsils = Tehsil::where('district_id', $news->district_id)->where('is_active', true)->orderBy('name')->get();
-
-        return view('reporter.news.edit', compact('news', 'categories', 'states', 'districts', 'tehsils'));
-    }
-
-    public function update(Request $request, $id)
-    {
-        $news = News::where('user_id', auth()->id())->findOrFail($id);
-
-        $request->validate([
-            'title' => 'required|max:255',
-            'content' => 'required',
-            'category_id' => 'required',
-            'state_id' => 'required',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048'
-        ]);
-
-        $news->title = $request->title;
-        $news->content = $request->content;
-        $news->summary = $request->summary;
-        $news->category_id = $request->category_id;
-        $news->state_id = $request->state_id;
-        $news->district_id = $request->district_id;
-        $news->tehsil_id = $request->tehsil_id;
-
-        if ($request->hasFile('image')) {
-            if ($news->image) {
-                Storage::disk('public')->delete($news->image);
+            // ============================================================
+            // ✅ SEO META - ALWAYS DEFINED WITH FALLBACK
+            // ============================================================
+            try {
+                $seoMeta = $this->seoService->generateSEOMeta($news);
+            } catch (\Exception $e) {
+                Log::error('SEO Meta generation failed: ' . $e->getMessage());
+                $seoMeta = $this->getDefaultSEOMeta($news);
             }
-            $imagePath = $request->file('image')->store('news/' . date('Y/m'), 'public');
-            $news->image = $imagePath;
+
+            // ============================================================
+            // ✅ NEWS SCHEMA - WITH FALLBACK
+            // ============================================================
+            try {
+                $newsSchema = $this->seoService->generateNewsSchema($news);
+            } catch (\Exception $e) {
+                Log::error('News Schema generation failed: ' . $e->getMessage());
+                $newsSchema = $this->getDefaultNewsSchema($news);
+            }
+
+            // ============================================================
+            // ✅ BREADCRUMB SCHEMA - WITH FALLBACK
+            // ============================================================
+            try {
+                $breadcrumbSchema = $this->seoService->generateBreadcrumbSchema($news);
+            } catch (\Exception $e) {
+                Log::error('Breadcrumb Schema generation failed: ' . $e->getMessage());
+                $breadcrumbSchema = $this->getDefaultBreadcrumbSchema($news);
+            }
+
+            // ============================================================
+            // ✅ ADS - WITH FALLBACK
+            // ============================================================
+            $sidebarAds = collect([]);
+            $inArticleAds = collect([]);
+
+            try {
+                $location = $this->adService->getUserLocation();
+                $sidebarAds = $this->adService->getAds('sidebar', $location);
+                $inArticleAds = $this->adService->getAds('in-article', $location);
+            } catch (\Exception $e) {
+                Log::error('Ad Service failed: ' . $e->getMessage());
+            }
+
+            return view('news.show', compact(
+                'news',
+                'relatedNews',
+                'trendingNews',
+                'seoMeta',
+                'newsSchema',
+                'breadcrumbSchema',
+                'sidebarAds',
+                'inArticleAds'
+            ));
+
+        } catch (\Exception $e) {
+            Log::error('News show error: ' . $e->getMessage());
+            abort(404, 'News not found');
         }
-
-        $news->save();
-
-        return redirect()->route('reporter.news.index')->with('success', 'खबर सफलतापूर्वक अपडेट कर दी गई है।');
     }
 
-    public function show($id)
+    /**
+     * ✅ Search News
+     */
+    public function search(Request $request)
     {
-        $news = News::where('user_id', auth()->id())->findOrFail($id);
-        return view('reporter.news.show', compact('news'));
+        $query = $request->get('q');
+        $category = $request->get('category');
+        $location = $request->get('location');
+
+        $news = News::where('status', 'published');
+
+        if ($query) {
+            $news->where(function($q) use ($query) {
+                $q->where('title', 'LIKE', "%{$query}%")
+                  ->orWhere('summary', 'LIKE', "%{$query}%")
+                  ->orWhere('body', 'LIKE', "%{$query}%");
+            });
+        }
+
+        if ($category) {
+            $news->where('category_id', $category);
+        }
+
+        if ($location) {
+            $news->where(function($q) use ($location) {
+                $q->where('state_id', $location)
+                  ->orWhere('district_id', $location)
+                  ->orWhere('tehsil_id', $location)
+                  ->orWhere('block_id', $location);
+            });
+        }
+
+        $news = $news->orderBy('published_at', 'desc')->paginate(20);
+
+        return view('news.search', compact('news', 'query'));
     }
 
-    public function destroy($id)
+    /**
+     * ✅ Category News
+     */
+    public function category($slug)
     {
-        $news = News::where('user_id', auth()->id())->findOrFail($id);
-        if ($news->image) {
-            Storage::disk('public')->delete($news->image);
-        }
-        $news->delete();
+        $category = NewsCategory::where('slug', $slug)->firstOrFail();
 
-        return redirect()->route('reporter.news.index')->with('success', 'खबर सफलतापूर्वक हटा दी गई है।');
+        $news = News::where('category_id', $category->id)
+            ->where('status', 'published')
+            ->orderBy('published_at', 'desc')
+            ->paginate(20);
+
+        // ✅ Trending news for sidebar
+        $trendingNews = News::where('status', 'published')
+            ->orderBy('views', 'desc')
+            ->limit(10)
+            ->get();
+
+        return view('news.category', compact('category', 'news', 'trendingNews'));
+    }
+
+    /**
+     * ✅ State News
+     */
+    public function state($slug)
+    {
+        $state = State::where('slug', $slug)->firstOrFail();
+
+        $news = News::where('state_id', $state->id)
+            ->where('status', 'published')
+            ->orderBy('published_at', 'desc')
+            ->paginate(20);
+
+        $trendingNews = News::where('status', 'published')
+            ->orderBy('views', 'desc')
+            ->limit(10)
+            ->get();
+
+        return view('news.state', compact('state', 'news', 'trendingNews'));
+    }
+
+    /**
+     * ✅ District News
+     */
+    public function district($slug)
+    {
+        $district = District::where('slug', $slug)->firstOrFail();
+
+        $news = News::where('district_id', $district->id)
+            ->where('status', 'published')
+            ->orderBy('published_at', 'desc')
+            ->paginate(20);
+
+        $trendingNews = News::where('status', 'published')
+            ->orderBy('views', 'desc')
+            ->limit(10)
+            ->get();
+
+        return view('news.district', compact('district', 'news', 'trendingNews'));
+    }
+
+    /**
+     * ✅ Tehsil News
+     */
+    public function tehsil($slug)
+    {
+        $tehsil = Tehsil::where('slug', $slug)->firstOrFail();
+
+        $news = News::where('tehsil_id', $tehsil->id)
+            ->where('status', 'published')
+            ->orderBy('published_at', 'desc')
+            ->paginate(20);
+
+        $trendingNews = News::where('status', 'published')
+            ->orderBy('views', 'desc')
+            ->limit(10)
+            ->get();
+
+        return view('news.tehsil', compact('tehsil', 'news', 'trendingNews'));
+    }
+
+    /**
+     * ✅ Block News
+     */
+    public function block($slug)
+    {
+        $block = Block::where('slug', $slug)->firstOrFail();
+
+        $news = News::where('block_id', $block->id)
+            ->where('status', 'published')
+            ->orderBy('published_at', 'desc')
+            ->paginate(20);
+
+        $trendingNews = News::where('status', 'published')
+            ->orderBy('views', 'desc')
+            ->limit(10)
+            ->get();
+
+        return view('news.block', compact('block', 'news', 'trendingNews'));
+    }
+
+    // ============================================================
+    // ✅ DEFAULT FALLBACK METHODS
+    // ============================================================
+
+    /**
+     * ✅ Default SEO Meta (Fallback)
+     */
+    protected function getDefaultSEOMeta($news)
+    {
+        return [
+            'title' => $news->title ?? 'द पब्लिक एक्सप्रेस',
+            'description' => strip_tags($news->summary ?? $news->body ?? 'हर कस्बे गाँव और सिटी की खबरें'),
+            'og_title' => $news->title ?? 'द पब्लिक एक्सप्रेस',
+            'og_description' => strip_tags($news->summary ?? 'हर कस्बे गाँव और सिटी की खबरें'),
+            'og_image' => $news->featured_image ?? asset('images/logo.png'),
+            'og_url' => route('news.show', $news->slug ?? ''),
+            'og_type' => 'article',
+            'twitter_card' => 'summary_large_image',
+            'twitter_title' => $news->title ?? 'द पब्लिक एक्सप्रेस',
+            'twitter_description' => strip_tags($news->summary ?? 'हर कस्बे गाँव और सिटी की खबरें'),
+            'twitter_image' => $news->featured_image ?? asset('images/logo.png'),
+        ];
+    }
+
+    /**
+     * ✅ Default News Schema (Fallback)
+     */
+    protected function getDefaultNewsSchema($news)
+    {
+        return [
+            '@context' => 'https://schema.org',
+            '@type' => 'NewsArticle',
+            'headline' => $news->title ?? '',
+            'description' => $news->summary ?? '',
+            'image' => $news->featured_image ?? '',
+            'datePublished' => $news->published_at ?? $news->created_at ?? date('Y-m-d H:i:s'),
+            'dateModified' => $news->updated_at ?? date('Y-m-d H:i:s'),
+            'author' => [
+                '@type' => 'Person',
+                'name' => $news->user->name ?? 'द पब्लिक एक्सप्रेस'
+            ],
+            'publisher' => [
+                '@type' => 'Organization',
+                'name' => 'द पब्लिक एक्सप्रेस',
+                'logo' => [
+                    '@type' => 'ImageObject',
+                    'url' => asset('images/logo.png')
+                ]
+            ],
+            'mainEntityOfPage' => [
+                '@type' => 'WebPage',
+                '@id' => route('news.show', $news->slug ?? '')
+            ]
+        ];
+    }
+
+    /**
+     * ✅ Default Breadcrumb Schema (Fallback)
+     */
+    protected function getDefaultBreadcrumbSchema($news)
+    {
+        return [
+            '@context' => 'https://schema.org',
+            '@type' => 'BreadcrumbList',
+            'itemListElement' => [
+                [
+                    '@type' => 'ListItem',
+                    'position' => 1,
+                    'name' => 'होम',
+                    'item' => url('/')
+                ],
+                [
+                    '@type' => 'ListItem',
+                    'position' => 2,
+                    'name' => $news->category->name ?? 'खबरें',
+                    'item' => route('category.show', $news->category->slug ?? '')
+                ],
+                [
+                    '@type' => 'ListItem',
+                    'position' => 3,
+                    'name' => $news->title ?? 'खबर',
+                    'item' => route('news.show', $news->slug ?? '')
+                ]
+            ]
+        ];
     }
 }

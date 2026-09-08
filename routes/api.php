@@ -1,8 +1,10 @@
 <?php
+
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\OtpAuthController;
 use App\Http\Controllers\Api\NewsController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\PollController; // ✅ Import PollController
 
 // Auth
 Route::post('/auth/send-otp',   [OtpAuthController::class, 'sendOtp']);
@@ -23,4 +25,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/withdraw',  [UserController::class, 'requestWithdrawal']);
     Route::post('/news',      [NewsController::class, 'store']);
     Route::get('/my-news',    [NewsController::class, 'myNews']);
+});
+
+// ============================================================
+// ✅ OPINION POLL ROUTES (Public – IP-based voting)
+// ============================================================
+Route::prefix('poll')->group(function () {
+    Route::get('/seats', [PollController::class, 'getSeats']);
+    Route::get('/questions/{seatId}', [PollController::class, 'getQuestions']);
+    Route::post('/submit', [PollController::class, 'submitPoll']);
+    Route::get('/results/{pollId}', [PollController::class, 'getResults']);
 });

@@ -13,6 +13,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(AssemblySeatsSeeder::class);
+
         // 1. Roles insert karein
         DB::table('roles')->insert([
             ['name' => 'super_admin', 'slug' => 'super-admin'],

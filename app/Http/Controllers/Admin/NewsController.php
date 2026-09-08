@@ -1,262 +1,543 @@
 <?php
-// app/Http/Controllers/Admin/NewsController.php
 
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\News;
 use App\Models\Category;
-use App\Models\State;
-use App\Models\District;
-use App\Models\Tehsil;
-use App\Models\Block;
+use App\Models\PushSubscription;
 use App\Models\User;
-use App\Models\Notification;
-use App\Models\ReporterPoint;
+use App\Services\SEOService;
+use App\Helpers\NotificationHelper;
+use App\Helpers\ImageHelper;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use App\Events\NewsApproved;
+use App\Events\NewsRejected;
 
 class NewsController extends Controller
 {
-    /**
-     * Display a listing of the news.
-     */
+    protected $seoService;
+
+    public function __construct(SEOService $seoService)
+    {
+        $this->seoService = $seoService;
+    }
+
     public function index(Request $request)
     {
-        $query = News::with(['user', 'category', 'state', 'district', 'tehsil', 'block']);
+        try {
+            $query = News::with(['user', 'category']);
 
-        // Search filter
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('slug', 'like', "%{$search}%")
-                  ->orWhere('summary', 'like', "%{$search}%")
-                  ->orWhere('body', 'like', "%{$search}%");
-            });
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->filled('category')) {
+                $query->where('category_id', $request->category);
+            }
+
+            if ($request->filled('search')) {
+                $query->where('title', 'LIKE', '%' . $request->search . '%');
+            }
+
+            $news = $query->orderByRaw("FIELD(status, 'pending', 'published', 'rejected', 'draft')")->paginate(20);
+
+            $categories = Category::where('is_active', 1)->orderBy('order')->get();
+            $statuses = ['pending', 'published', 'rejected', 'draft'];
+
+            $counts = [
+                'total' => News::count(),
+                'pending' => News::where('status', 'pending')->count(),
+                'published' => News::where('status', 'published')->count(),
+                'rejected' => News::where('status', 'rejected')->count(),
+                'draft' => News::where('status', 'draft')->count(),
+            ];
+
+            return view('admin.news.index', compact('news', 'categories', 'statuses', 'counts'));
+
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Index Error: ' . $e->getMessage());
+            return back()->with('error', 'खबरें लोड करने में समस्या आ रही है।');
         }
+    }
 
-        // Status filter
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+    public function show($id)
+    {
+        try {
+            $news = News::with(['user', 'category'])->findOrFail($id);
+            return view('admin.news.show', compact('news'));
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Show Error: ' . $e->getMessage());
+            return redirect()->route('admin.news.index')->with('error', 'खबर नहीं मिली।');
         }
+    }
 
-        // Category filter
-        if ($request->filled('category')) {
-            $query->where('category_id', $request->category);
+    public function edit($id)
+    {
+        try {
+            $news = News::findOrFail($id);
+            $categories = Category::where('is_active', 1)->orderBy('order')->get();
+            $statuses = ['pending', 'published', 'rejected', 'draft'];
+
+            // ✅ Fetch reporters if needed for the view
+            $reporters = User::where('role', 'reporter')->get();
+
+            return view('admin.news.edit', compact('news', 'categories', 'statuses', 'reporters'));
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Edit Error: ' . $e->getMessage());
+            return redirect()->route('admin.news.index')->with('error', 'खबर नहीं मिली।');
         }
-
-        // Location filter
-        if ($request->filled('state_id')) {
-            $query->where('state_id', $request->state_id);
-        }
-
-        if ($request->filled('district_id')) {
-            $query->where('district_id', $request->district_id);
-        }
-
-        if ($request->filled('tehsil_id')) {
-            $query->where('tehsil_id', $request->tehsil_id);
-        }
-
-        if ($request->filled('block_id')) {
-            $query->where('block_id', $request->block_id);
-        }
-
-        // Date filter
-        if ($request->filled('date_from')) {
-            $query->whereDate('created_at', '>=', $request->date_from);
-        }
-
-        if ($request->filled('date_to')) {
-            $query->whereDate('created_at', '<=', $request->date_to);
-        }
-
-        $news = $query->latest()->paginate(20);
-
-        // Get filter data
-        $categories = Category::where('is_active', true)->get();
-        $states = State::where('is_active', true)->get();
-        $districts = District::where('is_active', true)->get();
-        $tehsils = Tehsil::where('is_active', true)->get();
-        $blocks = Block::where('is_active', true)->get();
-
-        // Stats
-        $stats = [
-            'total' => News::count(),
-            'published' => News::where('status', 'published')->count(),
-            'pending' => News::where('status', 'pending')->count(),
-            'rejected' => News::where('status', 'rejected')->count(),
-            'draft' => News::where('status', 'draft')->count(),
-            'breaking' => News::where('is_breaking', true)->count(),
-            'featured' => News::where('is_featured', true)->count(),
-        ];
-
-        return view('admin.news.index', compact('news', 'categories', 'states', 'districts', 'tehsils', 'blocks', 'stats'));
     }
 
     /**
-     * Display the specified news.
+     * ✅ Update News - With Image Upload & Progress
      */
-    public function show(News $news)
+    public function update(Request $request, $id)
     {
-        $news->load(['user', 'category', 'state', 'district', 'tehsil', 'block', 'approver']);
-        return view('admin.news.show', compact('news'));
-    }
+        try {
+            $news = News::findOrFail($id);
 
-    /**
-     * Show the form for editing the specified news.
-     */
-    public function edit(News $news)
-    {
-        $categories = Category::where('is_active', true)->get();
-        $states = State::where('is_active', true)->get();
-        $districts = District::where('is_active', true)->get();
-        $tehsils = Tehsil::where('is_active', true)->get();
-        $blocks = Block::where('is_active', true)->get();
-        
-        // Get reporters for dropdown
-        $reporters = User::whereIn('role', [
-            'reporter', 
-            'state_reporter', 
-            'district_reporter', 
-            'tehsil_reporter', 
-            'block_reporter', 
-            'national_reporter'
-        ])
-        ->where('is_active', true)
-        ->orderBy('name')
-        ->get();
+            $request->validate([
+                'title' => 'required|string|max:255',
+                'category_id' => 'required|exists:news_categories,id',
+                'summary' => 'nullable|string',
+                'body' => 'required|string',
+                'status' => 'required|in:pending,published,rejected,draft',
+                'is_breaking' => 'boolean',
+                'is_featured' => 'boolean',
+                'featured_image' => 'nullable|image|max:5120',
+                'send_notification' => 'boolean',
+            ]);
 
-        return view('admin.news.edit', compact(
-            'news', 
-            'categories', 
-            'states', 
-            'districts', 
-            'tehsils', 
-            'blocks', 
-            'reporters'
-        ));
-    }
+            // 🔒 Keep original slug
+            $originalSlug = $news->slug;
 
-    /**
-     * Update the specified news.
-     */
-    public function update(Request $request, News $news)
-    {
-        $request->validate([
-            'title' => 'required|string|max:255',
-            'category_id' => 'required|exists:categories,id',
-            'status' => 'required|in:draft,pending,published,rejected',
-            'summary' => 'nullable|string|max:500',
-            'body' => 'required|string',
-            'state_id' => 'nullable|exists:states,id',
-            'district_id' => 'nullable|exists:districts,id',
-            'tehsil_id' => 'nullable|exists:tehsils,id',
-            'block_id' => 'nullable|exists:blocks,id',
-            'is_breaking' => 'nullable|boolean',
-            'is_featured' => 'nullable|boolean',
-            'is_national' => 'nullable|boolean',
-            'is_state' => 'nullable|boolean',
-        ]);
+            // ✅ Handle Featured Image with Optimization
+            if ($request->hasFile('featured_image')) {
+                // Delete old image
+                if ($news->featured_image) {
+                    ImageHelper::delete($news->featured_image);
+                }
+                
+                $imagePath = ImageHelper::optimizeAndSave(
+                    $request->file('featured_image'),
+                    'news',
+                    [
+                        'max_width' => 1200,
+                        'max_height' => 800,
+                        'quality' => 80,
+                        'max_size_kb' => 50,
+                        'webp' => true,
+                        'watermark' => false,
+                    ]
+                );
+                
+                if ($imagePath) {
+                    $news->featured_image = $imagePath;
+                    Log::info('✅ Admin: News image updated and optimized', [
+                        'path' => $imagePath,
+                        'news_id' => $news->id
+                    ]);
+                } else {
+                    // If image optimization failed, keep old image
+                    Log::warning('⚠️ Image optimization failed, keeping old image');
+                }
+            }
 
-        $news->update([
-            'title' => $request->title,
-            'category_id' => $request->category_id,
-            'status' => $request->status,
-            'summary' => $request->summary,
-            'body' => $request->body,
-            'state_id' => $request->state_id,
-            'district_id' => $request->district_id,
-            'tehsil_id' => $request->tehsil_id,
-            'block_id' => $request->block_id,
-            'is_breaking' => $request->is_breaking ?? false,
-            'is_featured' => $request->is_featured ?? false,
-            'is_national' => $request->is_national ?? false,
-            'is_state' => $request->is_state ?? false,
-        ]);
+            // ✅ Update ONLY existing columns
+            $news->title = $request->title;
+            $news->category_id = $request->category_id;
+            $news->summary = $request->summary;
+            $news->body = $request->body;
+            $news->status = $request->status;
+            $news->is_breaking = $request->has('is_breaking');
+            $news->is_featured = $request->has('is_featured');
+            
+            // ✅ Keep original slug
+            if (!empty($originalSlug)) {
+                $news->slug = $originalSlug;
+            }
 
-        if ($request->status == 'published') {
-            $news->published_at = $news->published_at ?? now();
+            // ✅ Update SEO fields ONLY if columns exist (check with Schema)
+            if (Schema::hasColumn('news', 'meta_title')) {
+                $news->meta_title = $request->title . ' - ' . config('app.name', 'द पब्लिक एक्सप्रेस');
+            }
+            if (Schema::hasColumn('news', 'meta_description')) {
+                $news->meta_description = $request->summary ?? strip_tags(substr($request->body, 0, 160));
+            }
+            if (Schema::hasColumn('news', 'meta_keywords')) {
+                $news->meta_keywords = $this->generateKeywords($request->title);
+            }
+
+            $news->save();
+
+            Log::info('✅ News updated', ['news_id' => $news->id, 'admin_id' => Auth::id()]);
+
+            // ✅ SEND PUSH NOTIFICATION IF PUBLISHED AND CHECKBOX CHECKED
+            if ($news->status === 'published' && $request->has('send_notification')) {
+                $sent = $this->sendNewsNotification($news, 'update');
+                return redirect()->route('admin.news.index')
+                    ->with('success', "✅ खबर अपडेट हो गई! Push Notification {$sent} subscribers को भेजी गई!");
+            }
+
+            return redirect()->route('admin.news.index')
+                ->with('success', '✅ खबर अपडेट हो गई!');
+
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Update Error: ' . $e->getMessage());
+            return back()->with('error', 'खबर अपडेट करने में समस्या आ रही है: ' . $e->getMessage());
         }
-
-        $news->save();
-
-        return redirect()->route('admin.news.index')
-            ->with('success', 'News updated successfully!');
     }
 
     /**
-     * Approve news.
+     * ✅ Approve News – With Push Notification
      */
-    public function approve(News $news)
+    public function approve($id)
     {
-        $user = auth()->user();
+        try {
+            $news = News::findOrFail($id);
 
-        if (!$news->canBeApprovedBy($user)) {
-            return back()->with('error', 'You are not authorized to approve this news.');
+            $news->update([
+                'status' => 'published',
+                'approval_status' => 'approved',
+                'approved_by' => Auth::id(),
+                'approved_at' => now(),
+                'published_at' => now(),
+                'rejection_reason' => null,
+            ]);
+
+            $newsUrl = route('news.show', $news->slug);
+            Log::info('📰 News approved', ['news_id' => $news->id, 'admin_id' => Auth::id(), 'url' => $newsUrl]);
+
+            // ✅ SEND PUSH NOTIFICATION TO ALL SUBSCRIBERS
+            $sent = $this->sendNewsNotification($news, 'approve');
+
+            // ✅ Fire Event: Reporter को Notification भेजें
+            event(new NewsApproved($news));
+
+            // ✅ Google Indexing API
+            try {
+                $googleResult = $this->seoService->submitToGoogleIndex($newsUrl);
+                if ($googleResult) {
+                    Log::info('✅ Google Indexing API Success', ['news_id' => $news->id, 'url' => $newsUrl]);
+                } else {
+                    Log::warning('⚠️ Google Indexing API Failed', ['news_id' => $news->id]);
+                }
+            } catch (\Exception $e) {
+                Log::error('❌ Google Indexing API Exception', [
+                    'news_id' => $news->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+
+            // ✅ Bing IndexNow
+            if (env('BING_INDEXNOW_ENABLED', false)) {
+                try {
+                    $bingResult = $this->seoService->submitToBing($newsUrl);
+                    if ($bingResult) {
+                        Log::info('✅ Bing IndexNow Success', ['news_id' => $news->id, 'url' => $newsUrl]);
+                    } else {
+                        Log::warning('⚠️ Bing IndexNow Failed', ['news_id' => $news->id]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('❌ Bing IndexNow Exception', [
+                        'news_id' => $news->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            return redirect()->route('admin.news.index')
+                ->with('success', "✅ खबर स्वीकृत कर प्रकाशित कर दी गई! Push Notification {$sent} subscribers को भेजी गई!");
+
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Approve Error: ' . $e->getMessage());
+            return back()->with('error', 'खबर स्वीकृत करने में समस्या आ रही है।');
         }
-
-        $news->approve($user);
-
-        return back()->with('success', 'News approved successfully! Reporter got 10 points.');
     }
 
     /**
-     * Reject news with reason.
+     * ✅ Send Push Notification for News
      */
-    public function reject(Request $request, News $news)
+    private function sendNewsNotification($news, $action = 'approve')
     {
-        $user = auth()->user();
+        try {
+            $totalSubscribers = PushSubscription::where('is_active', true)->count();
+            
+            if ($totalSubscribers === 0) {
+                Log::info('ℹ️ No active push subscribers to notify');
+                return 0;
+            }
 
-        $request->validate([
-            'rejection_reason' => 'required|string|min:10|max:500',
-        ]);
+            $categoryName = $news->category->name ?? 'नई खबर';
+            
+            if ($action === 'update') {
+                $title = '📰 अपडेट: ' . $news->title;
+            } else {
+                $title = '📰 ' . $categoryName . ': ' . $news->title;
+            }
+            
+            // ✅ Clean title for FCM
+            $cleanTitle = mb_convert_encoding($title, 'UTF-8', 'UTF-8');
+            $cleanTitle = preg_replace('/[\x00-\x1F\x7F-\x9F]/u', '', $cleanTitle);
+            $cleanTitle = preg_replace('/[^\x{0009}\x{000A}\x{000D}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', '', $cleanTitle);
+            
+            if (strlen($cleanTitle) > 100) {
+                $cleanTitle = mb_substr($cleanTitle, 0, 97) . '...';
+            }
+            
+            $body = $news->summary ?? strip_tags(substr($news->body, 0, 150));
+            $cleanBody = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
+            $cleanBody = preg_replace('/[\x00-\x1F\x7F-\x9F]/u', '', $cleanBody);
+            $cleanBody = preg_replace('/[^\x{0009}\x{000A}\x{000D}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', '', $cleanBody);
+            
+            if (empty($cleanTitle)) {
+                $cleanTitle = 'द पब्लिक एक्सप्रेस';
+            }
+            if (empty($cleanBody)) {
+                $cleanBody = 'ताजा खबर!';
+            }
 
-        if (!$news->canBeApprovedBy($user)) {
-            return back()->with('error', 'You are not authorized to reject this news.');
+            $data = [
+                'news_id' => (string) $news->id,
+                'category' => (string) $categoryName,
+                'type' => 'news',
+                'action' => (string) $action,
+                'timestamp' => now()->toISOString(),
+                'sound' => 'default',
+                'vibrate' => '200,100,200',
+            ];
+
+            $clickAction = route('news.show', $news->slug);
+
+            $sent = NotificationHelper::sendToAll($cleanTitle, $cleanBody, $data, $clickAction);
+
+            Log::info("📢 Push notification sent for news ID: {$news->id}, Action: {$action}, Sent to: {$sent} subscribers");
+
+            return $sent;
+
+        } catch (\Exception $e) {
+            Log::error('❌ Failed to send news notification: ' . $e->getMessage());
+            return 0;
         }
-
-        $news->reject($user, $request->rejection_reason);
-
-        return back()->with('success', 'News rejected successfully! Reporter has been notified.');
     }
 
     /**
-     * Toggle breaking news.
+     * ✅ Generate Keywords
      */
-    public function breaking(News $news)
+    private function generateKeywords($title)
     {
-        $news->is_breaking = !$news->is_breaking;
-        $news->save();
-
-        $status = $news->is_breaking ? 'added to' : 'removed from';
-        return back()->with('success', "News {$status} breaking news.");
+        $keywords = [];
+        $words = preg_split('/\s+/', strip_tags($title), -1, PREG_SPLIT_NO_EMPTY);
+        $keywords = array_merge($keywords, $words);
+        $keywords = array_unique($keywords);
+        $keywords = array_slice($keywords, 0, 10);
+        $keywords[] = 'द पब्लिक एक्सप्रेस';
+        return implode(', ', $keywords);
     }
 
     /**
-     * Toggle featured news.
+     * ✅ Reject News with Reason
      */
-    public function featured(News $news)
+    public function reject(Request $request, $id)
     {
-        $news->is_featured = !$news->is_featured;
-        $news->save();
+        try {
+            $request->validate([
+                'rejection_reason' => 'required|string|max:500',
+            ]);
 
-        $status = $news->is_featured ? 'added to' : 'removed from';
-        return back()->with('success', "News {$status} featured news.");
-    }
+            $news = News::findOrFail($id);
 
-    /**
-     * Remove the specified news.
-     */
-    public function destroy(News $news)
-    {
-        // Delete featured image
-        if ($news->featured_image && file_exists(storage_path('app/public/' . $news->featured_image))) {
-            unlink(storage_path('app/public/' . $news->featured_image));
+            $news->update([
+                'status' => 'rejected',
+                'approval_status' => 'rejected',
+                'rejected_at' => now(),
+                'rejection_reason' => $request->rejection_reason,
+            ]);
+
+            Log::info('❌ News rejected', [
+                'news_id' => $news->id,
+                'admin_id' => Auth::id(),
+                'reason' => $request->rejection_reason
+            ]);
+
+            event(new NewsRejected($news, $request->rejection_reason));
+
+            return redirect()->route('admin.news.index')
+                ->with('success', '❌ खबर अस्वीकृत कर दी गई!');
+
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Reject Error: ' . $e->getMessage());
+            return back()->with('error', 'खबर अस्वीकृत करने में समस्या आ रही है।');
         }
+    }
 
-        $news->delete();
+    public function destroy($id)
+    {
+        try {
+            $news = News::find($id);
+            if (!$news) {
+                return redirect()->route('admin.news.index')->with('error', 'खबर नहीं मिली।');
+            }
 
-        return back()->with('success', 'News deleted successfully!');
+            if ($news->featured_image) {
+                ImageHelper::delete($news->featured_image);
+            }
+
+            $news->delete();
+
+            return redirect()->route('admin.news.index')->with('success', '✅ खबर डिलीट कर दी गई!');
+
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Delete Error: ' . $e->getMessage());
+            return redirect()->route('admin.news.index')->with('error', 'खबर डिलीट करने में समस्या आ रही है।');
+        }
+    }
+
+    public function breaking($id)
+    {
+        try {
+            $news = News::findOrFail($id);
+            $news->update(['is_breaking' => !$news->is_breaking]);
+
+            if ($news->is_breaking && $news->status === 'published') {
+                $this->sendBreakingNotification($news);
+            }
+
+            return redirect()->route('admin.news.index')
+                ->with('success', $news->is_breaking ? '✅ Breaking News बन गई!' : '❌ Breaking News हटा दी गई!');
+
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Breaking Error: ' . $e->getMessage());
+            return back()->with('error', 'समस्या आ रही है।');
+        }
+    }
+
+    private function sendBreakingNotification($news)
+    {
+        try {
+            $title = '🚨 BREAKING: ' . $news->title;
+            $body = $news->summary ?? strip_tags(substr($news->body, 0, 150));
+            
+            $cleanTitle = mb_convert_encoding($title, 'UTF-8', 'UTF-8');
+            $cleanTitle = preg_replace('/[\x00-\x1F\x7F-\x9F]/u', '', $cleanTitle);
+            $cleanTitle = preg_replace('/[^\x{0009}\x{000A}\x{000D}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', '', $cleanTitle);
+            
+            if (empty($cleanTitle)) {
+                $cleanTitle = '🚨 BREAKING NEWS';
+            }
+            
+            $cleanBody = mb_convert_encoding($body, 'UTF-8', 'UTF-8');
+            $cleanBody = preg_replace('/[\x00-\x1F\x7F-\x9F]/u', '', $cleanBody);
+            $cleanBody = preg_replace('/[^\x{0009}\x{000A}\x{000D}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', '', $cleanBody);
+            
+            if (empty($cleanBody)) {
+                $cleanBody = 'ताजा खबर!';
+            }
+            
+            $data = [
+                'news_id' => (string) $news->id,
+                'type' => 'breaking',
+                'timestamp' => now()->toISOString(),
+                'sound' => 'default',
+                'vibrate' => '300,100,200,100,300',
+            ];
+
+            $clickAction = route('news.show', $news->slug);
+
+            $sent = NotificationHelper::sendToAll($cleanTitle, $cleanBody, $data, $clickAction);
+            
+            Log::info("🚨 Breaking news notification sent for news ID: {$news->id}, Sent to: {$sent} subscribers");
+
+        } catch (\Exception $e) {
+            Log::error('❌ Failed to send breaking notification: ' . $e->getMessage());
+        }
+    }
+
+    public function featured($id)
+    {
+        try {
+            $news = News::findOrFail($id);
+            $news->update(['is_featured' => !$news->is_featured]);
+
+            return redirect()->route('admin.news.index')
+                ->with('success', $news->is_featured ? '✅ Featured News बन गई!' : '❌ Featured News हटा दी गई!');
+
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Featured Error: ' . $e->getMessage());
+            return back()->with('error', 'समस्या आ रही है।');
+        }
+    }
+
+    public function store(Request $request)
+    {
+        try {
+            $request->validate([
+                'title' => 'required|string|max:255',
+                'category_id' => 'required|exists:news_categories,id',
+                'summary' => 'nullable|string',
+                'body' => 'required|string',
+                'status' => 'required|in:pending,published,rejected,draft',
+                'is_breaking' => 'boolean',
+                'is_featured' => 'boolean',
+                'featured_image' => 'nullable|image|max:5120',
+            ]);
+
+            $news = new News();
+            $news->title = $request->title;
+            $news->slug = Str::slug($request->title) . '-' . time();
+            $news->category_id = $request->category_id;
+            $news->summary = $request->summary;
+            $news->body = $request->body;
+            $news->status = $request->status;
+            $news->is_breaking = $request->has('is_breaking');
+            $news->is_featured = $request->has('is_featured');
+            $news->user_id = Auth::id();
+            
+            // ✅ Handle Featured Image with Optimization
+            if ($request->hasFile('featured_image')) {
+                $imagePath = ImageHelper::optimizeAndSave(
+                    $request->file('featured_image'),
+                    'news',
+                    [
+                        'max_width' => 1200,
+                        'max_height' => 800,
+                        'quality' => 80,
+                        'max_size_kb' => 50,
+                        'webp' => true,
+                        'watermark' => false,
+                    ]
+                );
+                
+                if ($imagePath) {
+                    $news->featured_image = $imagePath;
+                    Log::info('✅ Admin: News image optimized and saved', [
+                        'path' => $imagePath,
+                        'news_id' => $news->id
+                    ]);
+                }
+            }
+
+            $news->save();
+
+            Log::info('✅ News created', ['news_id' => $news->id, 'admin_id' => Auth::id()]);
+
+            if ($news->status === 'published') {
+                $sent = $this->sendNewsNotification($news, 'approve');
+                return redirect()->route('admin.news.index')
+                    ->with('success', "✅ खबर बन गई! Push Notification {$sent} subscribers को भेजी गई!");
+            }
+
+            return redirect()->route('admin.news.index')
+                ->with('success', '✅ खबर बन गई!');
+
+        } catch (\Exception $e) {
+            Log::error('❌ Admin News Store Error: ' . $e->getMessage());
+            return back()->with('error', 'खबर बनाने में समस्या आ रही है।');
+        }
     }
 }

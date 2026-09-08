@@ -12,7 +12,8 @@
 
     <div class="card">
         <div class="card-body">
-            <form action="{{ route('admin.users.update', $user) }}" method="POST" id="userForm">
+            {{-- ✅ Form with enctype="multipart/form-data" for photo upload --}}
+            <form action="{{ route('admin.users.update', $user) }}" method="POST" id="userForm" enctype="multipart/form-data">
                 @csrf
                 @method('PUT')
 
@@ -34,6 +35,27 @@
                         <div class="mb-3">
                             <label class="form-label">Phone</label>
                             <input type="text" name="phone" class="form-control" value="{{ old('phone', $user->phone) }}">
+                        </div>
+
+                        {{-- ✅ Bio (जीवन परिचय) --}}
+                        <div class="mb-3">
+                            <label class="form-label">Bio / जीवन परिचय</label>
+                            <textarea name="bio" class="form-control" rows="4">{{ old('bio', $user->bio) }}</textarea>
+                        </div>
+
+                        {{-- ✅ Profile Photo --}}
+                        <div class="mb-3">
+                            <label class="form-label">Profile Photo / प्रोफाइल फोटो</label>
+                            <br>
+                            @if($user->photo && file_exists(public_path($user->photo)))
+                                <img src="{{ asset($user->photo) }}" width="100" height="100" style="border-radius:50%; object-fit:cover; margin-bottom:10px; border:2px solid #ddd;">
+                                <br>
+                            @else
+                                <span class="text-muted">No photo uploaded</span>
+                                <br>
+                            @endif
+                            <input type="file" name="photo" class="form-control-file" accept="image/*">
+                            <small class="text-muted">Max: 2MB (jpg, png, gif)</small>
                         </div>
                         
                         <div class="mb-3">

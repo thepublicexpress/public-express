@@ -22,7 +22,15 @@
             transition: transform 0.3s ease-in-out;
             transform: translateX(0);
             box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.65) rgba(0,0,0,0.18);
         }
+        .sidebar::-webkit-scrollbar { width: 8px; }
+        .sidebar::-webkit-scrollbar-track { background: rgba(0,0,0,0.18); }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.65); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+        .sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.9); background-clip: padding-box; }
         .sidebar.closed { transform: translateX(-280px); }
         .sidebar .brand { padding: 20px; text-align: center; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .sidebar .brand h4 { font-weight: 700; margin-bottom: 0; }
@@ -42,6 +50,7 @@
         .sidebar .nav-link:hover { background: rgba(255,255,255,0.12); color: white; }
         .sidebar .nav-link.active { background: rgba(255,255,255,0.2); color: white; font-weight: 600; }
         .sidebar .nav-link i { width: 28px; font-size: 1.1rem; text-align: center; margin-right: 12px; }
+        .sidebar > nav { min-height: calc(100vh - 96px); padding-bottom: 18px; }
         .sidebar .dropdown-menu {
             background: rgba(255,255,255,0.1);
             border: none;
@@ -52,9 +61,7 @@
             width: auto;
             display: none;
         }
-        .sidebar .dropdown-menu.show {
-            display: block;
-        }
+        .sidebar .dropdown-menu.show { display: block; }
         .sidebar .dropdown-menu .dropdown-item {
             color: rgba(255,255,255,0.85);
             padding: 10px 20px 10px 48px;
@@ -65,14 +72,12 @@
             text-decoration: none;
             background: transparent;
         }
-        .sidebar .dropdown-menu .dropdown-item:hover {
-            background: rgba(255,255,255,0.12);
+        .sidebar .dropdown-menu .dropdown-item:hover { background: rgba(255,255,255,0.12); color: white; }
+        .sidebar .dropdown-menu .dropdown-item i { width: 24px; margin-right: 10px; font-size: 0.9rem; }
+        .sidebar .dropdown-menu .dropdown-item.active {
+            background: rgba(255,255,255,0.2);
             color: white;
-        }
-        .sidebar .dropdown-menu .dropdown-item i {
-            width: 24px;
-            margin-right: 10px;
-            font-size: 0.9rem;
+            font-weight: 600;
         }
         .sidebar .logout-btn {
             background: transparent;
@@ -146,6 +151,12 @@
         .badge-pending { background: #ffc107; color: #333; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; }
         .badge-rejected { background: #dc3545; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; }
         .badge-draft { background: #6c757d; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; }
+        
+        /* Badge styles for Ad status */
+        .badge-active { background: #28a745; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; }
+        .badge-inactive { background: #6c757d; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; }
+        .badge-paused { background: #ffc107; color: #333; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; }
+        
         @media (max-width: 991px) {
             .sidebar { transform: translateX(-280px); }
             .sidebar.open { transform: translateX(0); }
@@ -161,17 +172,10 @@
         .sidebar::-webkit-scrollbar { width: 4px; }
         .sidebar::-webkit-scrollbar-track { background: transparent; }
         .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
-        .dropdown-menu {
-            animation: fadeIn 0.2s ease-in-out;
-        }
+        .dropdown-menu { animation: fadeIn 0.2s ease-in-out; }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
-        }
-        .sidebar .dropdown-menu .dropdown-item.active {
-            background: rgba(255,255,255,0.2);
-            color: white;
-            font-weight: 600;
         }
     </style>
 </head>
@@ -186,17 +190,29 @@
         </div>
 
         <nav class="nav flex-column mt-2">
+            <!-- Dashboard -->
             <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
                 <i class="fas fa-tachometer-alt"></i> Dashboard
             </a>
+
+            <!-- News -->
             <a class="nav-link {{ request()->routeIs('admin.news.*') ? 'active' : '' }}" href="{{ route('admin.news.index') }}">
                 <i class="fas fa-newspaper"></i> News
             </a>
+
+            <!-- Users -->
             <a class="nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
                 <i class="fas fa-users"></i> Users
             </a>
+
+            <!-- Withdrawals -->
             <a class="nav-link {{ request()->routeIs('admin.withdrawals.*') ? 'active' : '' }}" href="{{ route('admin.withdrawals.index') }}">
                 <i class="fas fa-money-bill-wave"></i> Withdrawals
+            </a>
+
+            <!-- Opinion Poll -->
+            <a class="nav-link {{ request()->routeIs('admin.poll.*') ? 'active' : '' }}" href="{{ route('admin.poll.results') }}">
+                <i class="fas fa-chart-bar"></i> Opinion Poll UP Vidhan Sabha 2027
             </a>
 
             <!-- Locations Dropdown -->
@@ -225,12 +241,28 @@
                 </ul>
             </div>
 
+            <!-- Categories -->
             <a class="nav-link {{ request()->routeIs('admin.categories.*') ? 'active' : '' }}" href="{{ route('admin.categories.index') }}">
                 <i class="fas fa-tags"></i> Categories
             </a>
 
+            <!-- Reporter Assignments -->
             <a class="nav-link {{ request()->routeIs('admin.reporter-assignments.*') ? 'active' : '' }}" href="{{ route('admin.reporter-assignments.index') }}">
                 <i class="fas fa-user-check"></i> Reporter Assignments
+            </a>
+
+            <!-- ============================================================
+                 ✅ ADS MANAGEMENT
+            ============================================================ -->
+            <a class="nav-link {{ request()->routeIs('admin.ads.*') ? 'active' : '' }}" href="{{ route('admin.ads.index') }}">
+                <i class="fas fa-ad"></i> Ad Management
+            </a>
+
+            <!-- ============================================================
+                 ✅ NEWSLETTER MANAGEMENT (ADDED)
+            ============================================================ -->
+            <a class="nav-link {{ request()->routeIs('admin.newsletter.*') ? 'active' : '' }}" href="{{ route('admin.newsletter.index') }}">
+                <i class="fas fa-envelope"></i> Newsletter
             </a>
 
             <!-- Settings Dropdown -->
@@ -311,7 +343,7 @@
         }
 
         // =======================================================
-        // DROPDOWN TOGGLE FUNCTION - YAHAN SE ADD KIYA HAI
+        // DROPDOWN TOGGLE FUNCTION
         // =======================================================
         function toggleDropdown(element) {
             var dropdownMenu = element.nextElementSibling;
@@ -341,7 +373,7 @@
             }
         });
         // =======================================================
-        // DROPDOWN TOGGLE FUNCTION - YAHAN TAK
+        // DROPDOWN TOGGLE FUNCTION - END
         // =======================================================
 
         document.addEventListener('DOMContentLoaded', function() {

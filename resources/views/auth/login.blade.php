@@ -27,7 +27,6 @@
 <body>
 
 <div class="login-card">
-    <!-- Logo -->
     <div class="text-center mb-6">
         <div class="inline-flex items-center justify-center w-16 h-16 bg-brand rounded-2xl mb-3 shadow-lg">
             <i class="fas fa-newspaper text-white text-3xl"></i>
@@ -36,7 +35,6 @@
         <p class="text-sm text-gray-500">लॉगिन करें</p>
     </div>
 
-    <!-- Error Messages -->
     @if(session('error'))
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
             {{ session('error') }}
@@ -51,19 +49,18 @@
         </div>
     @endif
 
-    <!-- Email Login Form -->
     <form method="POST" action="{{ route('login.post') }}">
         @csrf
+        <input type="hidden" name="_token" value="{{ csrf_token() }}">
         <div class="mb-4">
             <label class="block text-sm font-bold text-gray-700 mb-1">📧 ईमेल</label>
-            <input type="email" name="email" class="input-field" placeholder="your@email.com" required>
+            <input type="email" name="email" class="input-field" placeholder="your@email.com" required value="{{ old('email') }}">
         </div>
         <div class="mb-4">
             <label class="block text-sm font-bold text-gray-700 mb-1">🔑 पासवर्ड</label>
             <input type="password" name="password" class="input-field" placeholder="••••••••" required>
         </div>
 
-        <!-- Forget Password Link -->
         <div class="text-right mb-4">
             <a href="{{ route('password.request') }}" class="text-sm text-brand hover:underline font-bold">
                 🔓 पासवर्ड भूल गए?
@@ -75,17 +72,14 @@
         </button>
     </form>
 
-    <!-- Divider -->
     <div class="divider">
         <span>या</span>
     </div>
 
-    <!-- OTP Login Button -->
     <a href="{{ route('otp.login') }}" class="btn-otp inline-block text-center">
         <i class="fas fa-mobile-alt mr-2"></i> मोबाइल नंबर से लॉगिन करें
     </a>
 
-    <!-- Register Link -->
     <div class="mt-4 text-center text-sm text-gray-600">
         अकाउंट नहीं है? 
         <a href="{{ route('register') }}" class="text-brand font-bold hover:underline">

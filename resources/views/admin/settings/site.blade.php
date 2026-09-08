@@ -10,6 +10,13 @@
         </div>
     </div>
 
+    @if(session('success'))
+        <div class="alert alert-success alert-dismissible fade show">
+            {{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
     @if(session('error'))
         <div class="alert alert-danger">{{ session('error') }}</div>
     @endif
@@ -42,12 +49,25 @@
                 </div>
 
                 <div class="row">
+                    <div class="col-md-12">
+                        <div class="mb-3">
+                            <label class="form-label">📝 मेटा विवरण (Meta Description)</label>
+                            <textarea name="meta_description" class="form-control" rows="3" maxlength="500">{{ old('meta_description', $settings['meta_description'] ?? 'द पब्लिक एक्सप्रेस – हर कस्बे, गाँव और सिटी की खबरें। ताजा हिंदी समाचार, राजनीति, शिक्षा, खेल और मनोरंजन।') }}</textarea>
+                            <small class="text-muted">SEO के लिए मेटा विवरण – 160 अक्षरों से अधिक न रखें (recommended), अधिकतम 500 अक्षर</small>
+                            <div class="mt-1">
+                                <span id="charCount" class="badge bg-secondary">0 / 500</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label class="form-label">साइट लोगो (Site Logo)</label>
-                            @if(isset($settings['site_logo']) && $settings['site_logo'])
+                            @if(isset($settings['site_logo']) && $settings['site_logo'] && file_exists(public_path($settings['site_logo'])))
                                 <div class="mb-2">
-                                    <img src="{{ asset('storage/' . $settings['site_logo']) }}" 
+                                    <img src="{{ asset($settings['site_logo']) . '?v=' . time() }}" 
                                          style="max-height:100px; border:1px solid #ddd; border-radius:4px; padding:4px;">
                                 </div>
                             @endif
@@ -61,9 +81,9 @@
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label class="form-label">फेविकॉन (Favicon)</label>
-                            @if(isset($settings['favicon']) && $settings['favicon'])
+                            @if(isset($settings['favicon']) && $settings['favicon'] && file_exists(public_path($settings['favicon'])))
                                 <div class="mb-2">
-                                    <img src="{{ asset('storage/' . $settings['favicon']) }}" 
+                                    <img src="{{ asset($settings['favicon']) . '?v=' . time() }}" 
                                          style="height:32px; width:32px; border:1px solid #ddd; border-radius:4px; padding:2px;">
                                 </div>
                             @endif
@@ -159,4 +179,40 @@
         </div>
     </div>
 </div>
+
+{{-- Character Counter --}}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const textarea = document.querySelector('textarea[name="meta_description"]');
+        const charCount = document.getElementById('charCount');
+        
+        if (textarea && charCount) {
+            function updateCharCount() {
+                const length = textarea.value.length;
+                charCount.textContent = length + ' / 500';
+                if (length > 160) {
+                    charCount.className = 'badge bg-warning';
+                } else {
+                    charCount.className = 'badge bg-secondary';
+                }
+                if (length > 500) {
+                    charCount.className = 'badge bg-danger';
+                }
+            }
+            
+            textarea.addEventListener('input', updateCharCount);
+            updateCharCount();
+        }
+    });
+</script>
+
+<style>
+    .form-control-color {
+        padding: 0.25rem;
+        height: 38px;
+    }
+    .input-group-text {
+        border-radius: 0.25rem 0 0 0.25rem;
+    }
+</style>
 @endsection

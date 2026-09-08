@@ -63,9 +63,10 @@ return [
     | will be used by the PHP date and date-time functions. The timezone
     | is set to "UTC" by default as it is suitable for most use cases.
     |
+    | [FIX] - भारतीय समय (IST) के लिए Asia/Kolkata सेट किया गया है।
     */
 
-    'timezone' => 'UTC',
+    'timezone' => 'Asia/Kolkata',  // <--- यहाँ UTC की जगह Asia/Kolkata कर दिया गया है
 
     /*
     |--------------------------------------------------------------------------

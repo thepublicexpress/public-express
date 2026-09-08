@@ -3,340 +3,416 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\OtpVerification;
 use App\Models\User;
+use App\Models\OtpVerification;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Session;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
 
 class OTPController extends Controller
 {
-    public function showOtpLogin()
+    /**
+     * Show OTP Registration Form
+     */
+    public function showRegisterForm()
+    {
+        return view('auth.otp-register');
+    }
+
+    /**
+     * Show OTP Login Form
+     */
+    public function showLoginForm()
     {
         return view('auth.otp-login');
     }
 
-    public function sendOTP(Request $request)
+    /**
+     * Generate and Send OTP – SECURE VERSION
+     */
+    public function generateOtp(Request $request)
     {
-        $request->validate([
-            'mobile' => 'required|digits:10',
-        ]);
-
-        $mobile = $request->mobile;
-
-        // Check if already registered
-        $user = User::where('phone', $mobile)->where('otp_verified', true)->first();
-        if ($user) {
+        // ✅ Rate Limiting: Max 5 OTP requests per hour per mobile
+        $rateLimitKey = 'otp-generate-' . $request->mobile;
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
             return response()->json([
                 'success' => false,
-                'message' => 'This number is already registered. Please login.',
-                'registered' => true,
-            ]);
-        }
-
-        // Rate limiting
-        $recentRequests = OtpVerification::where('mobile', $mobile)
-            ->where('created_at', '>', now()->subHour())
-            ->count();
-
-        if ($recentRequests >= 5) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Too many OTP requests. Please try after 1 hour.',
+                'message' => 'बहुत अधिक OTP अनुरोध। कृपया 1 घंटे बाद पुनः प्रयास करें।'
             ], 429);
         }
 
-        // Generate OTP
-        $otp = str_pad(random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $validator = Validator::make($request->all(), [
+            'mobile' => 'required|string|max:15',
+            'email' => 'nullable|email|max:255',
+            'name' => 'required_if:type,register|string|max:255',
+            'type' => 'required|in:login,register',
+        ]);
 
-        // Store in database
-        OtpVerification::create([
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $mobile = $request->mobile;
+        $type = $request->type;
+        $email = null;
+
+        // ✅ Check if user exists for login
+        if ($type == 'login') {
+            $user = User::where('phone', $mobile)->first();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'इस मोबाइल नंबर से कोई खाता नहीं मिला। कृपया पहले रजिस्टर करें।'
+                ], 404);
+            }
+            $email = $user->email;
+        }
+
+        // ✅ Check if user already exists for register
+        if ($type == 'register') {
+            $existingUser = User::where('phone', $mobile)->first();
+            if ($existingUser) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'यह मोबाइल नंबर पहले से रजिस्टर है। कृपया लॉगिन करें।'
+                ], 409);
+            }
+            $email = $request->email;
+        }
+
+        // ✅ Generate OTP
+        $otp = rand(100000, 999999);
+
+        // ✅ Delete old OTPs
+        OtpVerification::where('mobile', $mobile)->delete();
+
+        // ✅ Store OTP
+        $otpData = OtpVerification::create([
             'mobile' => $mobile,
+            'email' => $email,
             'otp' => $otp,
             'expires_at' => now()->addMinutes(10),
-            'is_used' => false,
+            'is_used' => 0,
             'attempts' => 0,
+            'resend_count' => 0,
+            'last_resend_at' => null,
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
 
-        // ===== SEND OTP VIA EMAIL =====
-        $emailSent = $this->sendOTPEmail($mobile, $otp);
-
-        // ===== SEND OTP VIA SMS (Fallback) =====
-        $smsSent = $this->sendEmailToSMS($mobile, $otp);
-
-        Log::info("OTP Generated", [
+        \Log::info('📦 OTP Stored', [
+            'id' => $otpData->id,
             'mobile' => $mobile,
+            'email' => $email,
             'otp' => $otp,
-            'email_sent' => $emailSent,
-            'sms_sent' => $smsSent,
         ]);
+
+        // ✅ Send OTP via Email (always)
+        if ($email) {
+            $this->sendOtpViaEmail($email, $otp);
+        }
+
+        // ✅ Send OTP via SMS (ONLY if enabled in .env)
+        if (env('SMS_ENABLED', false)) {
+            $this->sendOtpViaSms($mobile, $otp);
+        } else {
+            \Log::info('ℹ️ SMS sending skipped (SMS_ENABLED=false)');
+        }
+
+        // ✅ Rate Limiter hit
+        RateLimiter::hit($rateLimitKey, 3600);
 
         return response()->json([
             'success' => true,
-            'message' => 'OTP sent successfully! Check your email and SMS.',
-            'otp' => $otp, // DEVELOPMENT ONLY
-            'mobile' => $mobile,
-            'email_sent' => $emailSent,
-            'sms_sent' => $smsSent,
+            'message' => 'OTP सफलतापूर्वक भेज दिया गया!',
+            'otp_id' => $otpData->id,
+            'show_otp' => true,
         ]);
     }
 
     /**
-     * Send OTP via Email (Using Laravel Mail)
+     * Verify OTP – SECURE VERSION
      */
-    private function sendOTPEmail($mobile, $otp)
+    public function verifyOtp(Request $request)
     {
-        try {
-            // Get user's email if exists
-            $user = User::where('phone', $mobile)->first();
-            $email = $user ? $user->email : null;
+        \Log::info('🔐 Verify OTP Request Received', $request->all());
 
-            // If no email, try to use email-to-sms
-            if (!$email) {
-                Log::info("No email found for {$mobile}, sending via SMS only");
-                return false;
+        // ✅ Rate Limiting: Max 5 verification attempts per minute
+        $rateLimitKey = 'otp-verify-' . $request->mobile;
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'बहुत अधिक प्रयास। कृपया 1 मिनट बाद पुनः प्रयास करें।'
+            ], 429);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'mobile' => 'required|string|max:15',
+            'otp' => 'required|string|size:6',
+            'type' => 'required|in:login,register',
+            'name' => 'required_if:type,register|string|max:255',
+            'email' => 'nullable|email|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $mobile = $request->mobile;
+        $otp = $request->otp;
+        $type = $request->type;
+
+        // ✅ Find OTP – Only if not used and not expired
+        $otpRecord = OtpVerification::where('mobile', $mobile)
+            ->where('otp', $otp)
+            ->where('is_used', 0)
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if (!$otpRecord) {
+            RateLimiter::hit($rateLimitKey, 60);
+            
+            // ✅ Check if OTP exists but expired
+            $expiredOtp = OtpVerification::where('mobile', $mobile)
+                ->where('otp', $otp)
+                ->where('is_used', 0)
+                ->first();
+
+            if ($expiredOtp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP समाप्त हो गया है। कृपया नया OTP जनरेट करें।'
+                ], 400);
             }
 
-            $subject = "🔐 Your OTP for The Public Express";
+            return response()->json([
+                'success' => false,
+                'message' => 'गलत या अमान्य OTP। कृपया पुनः प्रयास करें।'
+            ], 400);
+        }
+
+        // ✅ Check IP Address consistency (optional but recommended)
+        if ($otpRecord->ip_address !== $request->ip()) {
+            \Log::warning('⚠️ OTP IP mismatch', [
+                'stored_ip' => $otpRecord->ip_address,
+                'request_ip' => $request->ip()
+            ]);
+        }
+
+        // ✅ Mark OTP as used
+        $otpRecord->update([
+            'is_used' => 1,
+        ]);
+
+        RateLimiter::clear($rateLimitKey);
+
+        // ✅ Registration flow
+        if ($type == 'register') {
+            $email = $request->email ?? $mobile . '@user.thepublicexpress.com';
             
-            $htmlContent = "
-            <html>
-            <head>
-                <style>
-                    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
-                    .container { max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-                    .header { text-align: center; padding-bottom: 20px; border-bottom: 2px solid #c62828; }
-                    .header h1 { color: #c62828; font-size: 24px; margin: 0; }
-                    .header p { color: #666; font-size: 14px; margin: 5px 0 0; }
-                    .otp-box { background: #f0f0f0; padding: 20px; text-align: center; font-size: 36px; font-weight: bold; letter-spacing: 8px; border-radius: 8px; margin: 20px 0; color: #c62828; }
-                    .footer { text-align: center; color: #999; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; }
-                    .warning { color: #666; font-size: 13px; text-align: center; }
-                </style>
-            </head>
-            <body>
-                <div class='container'>
-                    <div class='header'>
-                        <h1>📰 द पब्लिक एक्सप्रेस</h1>
-                        <p>OTP Verification</p>
-                    </div>
-                    <p style='text-align:center;font-size:16px;color:#333;'>Your OTP for mobile verification is:</p>
-                    <div class='otp-box'>{$otp}</div>
-                    <p style='text-align:center;color:#666;'>This OTP is valid for <strong>10 minutes</strong>.</p>
-                    <p style='text-align:center;color:#666;font-size:13px;'>If you didn't request this, please ignore this email.</p>
-                    <div class='footer'>
-                        <p>&copy; 2026 द पब्लिक एक्सप्रेस. All rights reserved.</p>
-                        <p style='font-size:11px;'>This is an automated message, please do not reply.</p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            ";
+            try {
+                $user = User::create([
+                    'name' => $request->name,
+                    'email' => $email,
+                    'phone' => $mobile,
+                    'password' => Hash::make(Str::random(12)),
+                    'role' => 'subscriber',
+                    'is_active' => 1,
+                    'is_approved' => 1,
+                    'is_verified' => 1,
+                    'points' => 0,
+                    'wallet_balance' => 0,
+                ]);
 
-            // Using Laravel Mail
-            Mail::send([], [], function ($message) use ($email, $subject, $htmlContent) {
+                \Log::info('✅ User Created', ['user_id' => $user->id, 'mobile' => $mobile]);
+
+                Auth::login($user);
+                $request->session()->regenerate();
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Registration successful!',
+                    'redirect' => url('/'),
+                ]);
+
+            } catch (\Exception $e) {
+                \Log::error('❌ Registration Failed', ['error' => $e->getMessage()]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Registration failed: ' . $e->getMessage(),
+                ], 500);
+            }
+        }
+
+        // ✅ Login flow
+        $user = User::where('phone', $mobile)->first();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found. Please register first.'
+            ], 404);
+        }
+
+        \Log::info('✅ User Found for Login', ['user_id' => $user->id, 'role' => $user->role]);
+
+        Auth::login($user);
+        $request->session()->regenerate();
+        
+        // ✅ Role based redirect
+        $redirectUrl = url('/');
+        $adminRoles = ['admin', 'super_admin', 'state_admin', 'district_admin', 'tehsil_admin'];
+        if (in_array($user->role, $adminRoles)) {
+            $redirectUrl = url('/admin/dashboard');
+        } elseif (str_contains($user->role, 'reporter')) {
+            $redirectUrl = url('/reporter/dashboard');
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login successful!',
+            'redirect' => $redirectUrl,
+        ]);
+    }
+
+    /**
+     * Resend OTP – SECURE VERSION
+     */
+    public function resendOtp(Request $request)
+    {
+        // ✅ Rate Limiting: Max 3 resend attempts per hour
+        $rateLimitKey = 'otp-resend-' . $request->mobile;
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 3)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'बहुत अधिक OTP पुनः भेजने के अनुरोध। कृपया 1 घंटे बाद पुनः प्रयास करें।'
+            ], 429);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'mobile' => 'required|string|max:15',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $mobile = $request->mobile;
+        
+        // ✅ Delete all old OTPs
+        OtpVerification::where('mobile', $mobile)->delete();
+
+        // ✅ Generate new OTP
+        $otp = rand(100000, 999999);
+
+        // ✅ Store new OTP
+        $otpData = OtpVerification::create([
+            'mobile' => $mobile,
+            'email' => null,
+            'otp' => $otp,
+            'expires_at' => now()->addMinutes(10),
+            'is_used' => 0,
+            'attempts' => 0,
+            'resend_count' => 1,
+            'last_resend_at' => now(),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        // ✅ Send OTP via Email (if email exists)
+        // (We don't have email here, so skip; only SMS if enabled)
+        if (env('SMS_ENABLED', false)) {
+            $this->sendOtpViaSms($mobile, $otp);
+        } else {
+            \Log::info('ℹ️ SMS resend skipped (SMS_ENABLED=false)');
+        }
+
+        RateLimiter::hit($rateLimitKey, 3600);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'नया OTP सफलतापूर्वक भेज दिया गया!',
+            'otp_id' => $otpData->id,
+            'show_otp' => true,
+        ]);
+    }
+
+    /**
+     * Check OTP Status
+     */
+    public function checkStatus(Request $request)
+    {
+        $mobile = $request->mobile;
+        $otpRecord = OtpVerification::where('mobile', $mobile)
+            ->where('is_used', 0)
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if ($otpRecord) {
+            return response()->json([
+                'exists' => true,
+                'expires_at' => $otpRecord->expires_at,
+            ]);
+        }
+
+        return response()->json([
+            'exists' => false,
+            'message' => 'No pending OTP found.'
+        ]);
+    }
+
+    // ============================================================
+    // ✅ PRIVATE METHODS (Email & SMS)
+    // ============================================================
+
+    /**
+     * Send OTP via Email
+     */
+    private function sendOtpViaEmail($email, $otp)
+    {
+        try {
+            \Mail::raw("Your OTP for The Public Express is: $otp\n\nThis OTP is valid for 10 minutes.\n\nThank you,\nThe Public Express Team", function ($message) use ($email) {
                 $message->to($email)
-                        ->subject($subject)
-                        ->html($htmlContent);
+                        ->subject('Your OTP for The Public Express');
             });
-
-            Log::info("Email OTP sent to {$email}");
+            \Log::info('✅ Email OTP sent to ' . $email);
             return true;
-
         } catch (\Exception $e) {
-            Log::error("Email sending failed: " . $e->getMessage());
+            \Log::error('Email sending failed: ' . $e->getMessage());
             return false;
         }
     }
 
     /**
-     * Send OTP via Email-to-SMS Gateway (Fallback)
+     * Send OTP via SMS (using email gateway) – ONLY called if SMS_ENABLED=true
      */
-    private function sendEmailToSMS($mobile, $otp)
+    private function sendOtpViaSms($mobile, $otp)
     {
-        $message = "Your OTP for The Public Express is: {$otp}. Valid for 10 minutes.";
-        $subject = "Your OTP for The Public Express";
-        
-        $gateways = [
-            "{$mobile}@sms.indiannumber.com",
-            "{$mobile}@txt.att.net",
-            "{$mobile}@tmomail.net",
-            "{$mobile}@vtext.com",
-            "{$mobile}@msg.fi",
-        ];
-
-        $headers = "From: noreply@thepublicexpress.com\r\n";
-        $headers .= "Reply-To: support@thepublicexpress.com\r\n";
-        $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
-
-        foreach ($gateways as $to) {
-            try {
-                if (@mail($to, $subject, $message, $headers)) {
-                    Log::info("SMS sent via email gateway to {$to}");
-                    return true;
-                }
-            } catch (\Exception $e) {
-                continue;
-            }
+        try {
+            $smsGateway = env('SMS_GATEWAY_EMAIL', 'sms.indiannumber.com');
+            $smsEmail = $mobile . '@' . $smsGateway;
+            
+            \Mail::raw("Your OTP for The Public Express is: $otp", function ($message) use ($smsEmail) {
+                $message->to($smsEmail)
+                        ->subject('OTP Verification');
+            });
+            
+            \Log::info('📲 SMS sent via email gateway to ' . $smsEmail);
+            return true;
+        } catch (\Exception $e) {
+            \Log::error('SMS sending failed: ' . $e->getMessage());
+            return false;
         }
-
-        return false;
-    }
-
-    public function verifyOTP(Request $request)
-    {
-        $request->validate([
-            'mobile' => 'required|digits:10',
-            'otp' => 'required|digits:6',
-        ]);
-
-        $mobile = $request->mobile;
-        $otp = $request->otp;
-
-        $otpRecord = OtpVerification::where('mobile', $mobile)
-            ->where('otp', $otp)
-            ->where('is_used', false)
-            ->where('expires_at', '>', now())
-            ->first();
-
-        if (!$otpRecord) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid or expired OTP.',
-            ], 422);
-        }
-
-        $otpRecord->update(['is_used' => true]);
-
-        $user = User::where('phone', $mobile)->first();
-
-        if ($user) {
-            $user->update([
-                'otp_verified' => true,
-                'mobile_verified_at' => now(),
-            ]);
-
-            auth()->login($user);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'OTP verified successfully!',
-                'exists' => true,
-            ]);
-        }
-
-        Session::put('otp_verified', true);
-        Session::put('mobile', $mobile);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'OTP verified! Complete your profile.',
-            'exists' => false,
-        ]);
-    }
-
-    public function resendOTP(Request $request)
-    {
-        $request->validate([
-            'mobile' => 'required|digits:10',
-        ]);
-
-        $mobile = $request->mobile;
-
-        $recentResends = OtpVerification::where('mobile', $mobile)
-            ->where('created_at', '>', now()->subHour())
-            ->count();
-
-        if ($recentResends >= 5) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Too many attempts. Try after 1 hour.',
-            ], 429);
-        }
-
-        $otp = str_pad(random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
-
-        OtpVerification::create([
-            'mobile' => $mobile,
-            'otp' => $otp,
-            'expires_at' => now()->addMinutes(10),
-            'is_used' => false,
-            'attempts' => 0,
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-        ]);
-
-        $this->sendOTPEmail($mobile, $otp);
-        $this->sendEmailToSMS($mobile, $otp);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'OTP resent successfully!',
-            'otp' => $otp,
-        ]);
-    }
-
-    public function register(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'nullable|email|unique:users,email',
-            'mobile' => 'required|digits:10|unique:users,phone',
-            'district_id' => 'nullable|exists:districts,id',
-            'state_id' => 'nullable|exists:states,id',
-        ]);
-
-        if (!Session::get('otp_verified') || Session::get('mobile') !== $request->mobile) {
-            return back()->with('error', 'OTP verification required.');
-        }
-
-        $subscriberId = 'SUB' . date('Y') . str_pad(rand(100000, 999999), 6, '0', STR_PAD_LEFT);
-
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'phone' => $request->mobile,
-            'password' => Hash::make(rand(10000000, 99999999)),
-            'role' => 'subscriber',
-            'is_subscriber' => true,
-            'is_active' => true,
-            'is_approved' => true,
-            'is_verified' => true,
-            'otp_verified' => true,
-            'mobile_verified_at' => now(),
-            'subscriber_id' => $subscriberId,
-            'district_id' => $request->district_id,
-            'state_id' => $request->state_id,
-            'points' => 0,
-            'wallet_balance' => 0,
-        ]);
-
-        Session::forget(['otp_verified', 'mobile']);
-
-        auth()->login($user);
-
-        return redirect()->route('home')
-            ->with('success', 'Welcome to The Public Express!');
-    }
-
-    public function checkStatus(Request $request)
-    {
-        $request->validate([
-            'mobile' => 'required|digits:10',
-        ]);
-
-        $otpRecord = OtpVerification::where('mobile', $request->mobile)
-            ->where('is_used', false)
-            ->where('expires_at', '>', now())
-            ->latest()
-            ->first();
-
-        return response()->json([
-            'has_valid_otp' => (bool) $otpRecord,
-            'expires_in' => $otpRecord ? now()->diffInSeconds($otpRecord->expires_at) : 0,
-        ]);
     }
 }

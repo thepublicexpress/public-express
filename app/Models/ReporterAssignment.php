@@ -1,6 +1,5 @@
 <?php
 // app/Models/ReporterAssignment.php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +30,7 @@ class ReporterAssignment extends Model
     public $timestamps = false;
 
     // ===== RELATIONSHIPS =====
+
     public function reporter()
     {
         return $this->belongsTo(User::class, 'reporter_id');
@@ -61,12 +61,14 @@ class ReporterAssignment extends Model
         return $this->belongsTo(Block::class, 'assigned_block_id');
     }
 
+    // ✅ FIXED: NewsCategory → Category
     public function assignedCategory()
     {
         return $this->belongsTo(Category::class, 'assigned_category_id');
     }
 
     // ===== HELPERS =====
+
     public function getAssignedCategoriesArray()
     {
         return $this->assigned_categories ?? [];

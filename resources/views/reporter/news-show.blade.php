@@ -1,189 +1,279 @@
-<!DOCTYPE html>
-<html lang="hi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $news->title }} - द पब्लिक एक्सप्रेस</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { font-family: 'Noto Sans Devanagari', sans-serif; background-color: #f3f4f6; }
-        .bg-brand { background-color: #c62828; }
-        .text-brand { color: #c62828; }
-        .border-brand { border-color: #c62828; }
-        .status-badge { padding: 4px 14px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
-        .status-published { background: #dcfce7; color: #166534; }
-        .status-pending { background: #fef3c7; color: #92400e; }
-        .status-rejected { background: #fee2e2; color: #991b1b; }
-        .status-draft { background: #e5e7eb; color: #374151; }
-        .content-body p { margin-bottom: 12px; line-height: 1.8; }
-        .content-body img { max-width: 100%; border-radius: 8px; margin: 16px 0; }
-        .content-body h2, .content-body h3 { font-weight: 700; margin: 16px 0 8px; }
-        .content-body ul, .content-body ol { padding-left: 24px; margin-bottom: 12px; }
-        .card-shadow { box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-    </style>
-</head>
-<body>
+@extends('layouts.reporter')
 
-    <!-- Header -->
-    <header class="bg-brand text-white p-4 sticky top-0 z-50 flex items-center gap-3 shadow-md">
-        <a href="{{ route('reporter.news.index') }}" class="hover:text-gray-200 transition">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-            </svg>
-        </a>
-        <h1 class="text-lg font-bold truncate">📰 खबर देखें</h1>
-        <span class="ml-auto text-xs bg-white/20 px-3 py-1 rounded-full">
-            #{{ $news->id }}
-        </span>
-    </header>
+@section('title', 'खबर देखें')
 
-    <main class="p-4 max-w-3xl mx-auto">
+@section('content')
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4 text-gray-800">📰 खबर देखें</h1>
+        </div>
+    </div>
 
-        <a href="{{ route('reporter.news.index') }}" class="inline-flex items-center gap-2 text-gray-600 hover:text-brand transition text-sm mb-4">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-            </svg>
-            मेरी खबरें
-        </a>
+    <div class="row">
+        <!-- Main Content -->
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">खबर की विस्तृत जानकारी</h6>
+                    <div>
+                        <a href="{{ route('reporter.news.edit', $news->id) }}" class="btn btn-warning btn-sm">
+                            <i class="fas fa-edit"></i> संपादित करें
+                        </a>
+                        <a href="{{ route('reporter.news.index') }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> वापस
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Featured Image -->
+                    @if($news->featured_image)
+                        <div class="text-center mb-4">
+                            <img src="{{ asset($news->featured_image) }}" alt="{{ $news->alt_text ?? $news->title }}" 
+                                 class="img-fluid rounded" style="max-height: 400px; width: 100%; object-fit: cover;">
+                        </div>
+                    @endif
 
-        @if($news->status == 'rejected' && $news->rejection_reason)
-            <div class="bg-red-50 border-2 border-red-500 p-4 rounded-xl mb-4">
-                <h5 class="text-red-700 font-bold">❌ This news was rejected!</h5>
-                <p class="text-red-600 mt-1"><strong>Reason:</strong> {{ $news->rejection_reason }}</p>
-                <p class="text-red-500 text-sm mt-2">💡 Edit and resubmit for approval.</p>
-                <a href="{{ route('reporter.news.edit', $news->id) }}" 
-                   class="inline-block mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">
-                    ✏️ Edit & Resubmit
-                </a>
-            </div>
-        @endif
-
-        <div class="bg-white rounded-2xl overflow-hidden card-shadow border border-gray-100">
-            
-            <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2 bg-gray-50/50">
-                <div class="flex items-center gap-3">
-                    <span class="status-badge 
-                        {{ $news->status == 'published' ? 'status-published' : 
-                           ($news->status == 'pending' ? 'status-pending' : 
-                           ($news->status == 'rejected' ? 'status-rejected' : 'status-draft')) }}">
-                        @if($news->status == 'published') ✅ लाइव
-                        @elseif($news->status == 'pending') ⏳ पेंडिंग
-                        @elseif($news->status == 'rejected') ❌ रिजेक्ट
-                        @else 📝 ड्राफ्ट
+                    <!-- Category & Badges -->
+                    <div class="mb-3">
+                        @if($news->category)
+                            <span class="badge bg-primary">{{ $news->category->name }}</span>
                         @endif
-                    </span>
-                </div>
-                <span class="text-xs text-gray-400">
-                    📅 {{ $news->created_at->format('d M Y, h:i A') }}
-                </span>
-            </div>
-
-            @if($news->featured_image)
-                <div class="w-full bg-gray-100">
-                    <img src="{{ url('/serve-image/' . urlencode($news->featured_image)) }}" 
-                         alt="{{ $news->title }}" 
-                         class="w-full max-h-[400px] object-cover"
-                         onerror="this.src='{{ asset('images/default-news.jpg') }}'">
-                </div>
-            @endif
-
-            <div class="p-6">
-                <div class="flex flex-wrap items-center gap-3 text-xs text-gray-500 mb-3">
-                    @if($news->category)
-                        <span class="bg-gray-100 px-3 py-1 rounded-full">📂 {{ $news->category->name }}</span>
-                    @endif
-                    @if($news->state)
-                        <span>📍 {{ $news->state->name }}</span>
-                    @endif
-                    @if($news->district)
-                        <span>→ {{ $news->district->name }}</span>
-                    @endif
-                    @if($news->tehsil)
-                        <span>→ {{ $news->tehsil->name }}</span>
-                    @endif
-                </div>
-
-                <h1 class="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight mb-3">
-                    {{ $news->title }}
-                </h1>
-
-                <div class="flex flex-wrap items-center gap-4 text-sm text-gray-500 border-b border-gray-100 pb-4 mb-4">
-                    <span>👁️ {{ number_format($news->views ?? 0) }} व्यूज</span>
-                    <span>❤️ {{ number_format($news->likes ?? 0) }} लाइक्स</span>
-                    <span>📤 {{ number_format($news->shares ?? 0) }} शेयर</span>
-                </div>
-
-                @if($news->summary)
-                    <div class="bg-gray-50 rounded-xl p-4 mb-4 border-l-4 border-brand">
-                        <p class="text-gray-700 text-sm italic">📌 {{ $news->summary }}</p>
+                        @if($news->is_breaking)
+                            <span class="badge bg-danger">🔴 BREAKING</span>
+                        @endif
+                        @if($news->is_featured)
+                            <span class="badge bg-warning text-dark">⭐ फीचर्ड</span>
+                        @endif
+                        <span class="badge bg-{{ $news->status == 'published' ? 'success' : ($news->status == 'draft' ? 'secondary' : 'warning') }}">
+                            {{ $news->status == 'published' ? '✅ प्रकाशित' : ($news->status == 'draft' ? '📝 ड्राफ्ट' : '⏳ समीक्षा के लिए') }}
+                        </span>
+                        @if($news->approval_status == 'approved')
+                            <span class="badge bg-success">✅ स्वीकृत</span>
+                        @elseif($news->approval_status == 'rejected')
+                            <span class="badge bg-danger">❌ अस्वीकृत</span>
+                        @else
+                            <span class="badge bg-warning text-dark">⏳ लंबित</span>
+                        @endif
                     </div>
-                @endif
 
-                <div class="content-body text-gray-800 text-base leading-relaxed">
-                    {!! nl2br(e($news->body)) !!}
-                </div>
+                    <!-- Title -->
+                    <h2 class="mb-3">{{ $news->title }}</h2>
 
-                @if($news->status == 'rejected' && $news->rejection_reason)
-                    <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg mt-4">
-                        <p class="text-sm font-bold text-red-700">❌ Rejection Reason:</p>
-                        <p class="text-sm text-red-600">{{ $news->rejection_reason }}</p>
+                    <!-- Reporter Info (with Photo & Bio) -->
+                    <div class="row mb-4 p-3 bg-light rounded">
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center">
+                                @if($news->user && $news->user->photo_url)
+                                    <img src="{{ $news->user->photo_url }}" alt="{{ $news->user->name }}" 
+                                         style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-right: 12px;">
+                                @else
+                                    <div style="width: 50px; height: 50px; border-radius: 50%; background: #ddd; display: flex; align-items: center; justify-content: center; margin-right: 12px; font-size: 20px;">
+                                        👤
+                                    </div>
+                                @endif
+                                <div>
+                                    <strong>{{ $news->user->name ?? 'N/A' }}</strong>
+                                    @if($news->user && $news->user->bio)
+                                        <br><small class="text-muted">{{ Str::limit($news->user->bio, 60) }}</small>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-md-end">
+                            <p class="mb-0"><strong>📅 प्रकाशित:</strong> {{ $news->published_at ? $news->published_at->format('d M Y, h:i A') : 'अभी तक नहीं' }}</p>
+                            <p class="mb-0"><strong>🔄 अपडेट:</strong> {{ $news->updated_at->format('d M Y, h:i A') }}</p>
+                            <p class="mb-0"><strong>👁️ व्यूज:</strong> {{ number_format($news->views ?? 0) }}</p>
+                        </div>
                     </div>
-                @endif
 
+                    <!-- Full Location Hierarchy -->
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="d-flex flex-wrap gap-2">
+                                @if($news->state)
+                                    <span class="badge bg-secondary">🏛️ {{ $news->state->name }}</span>
+                                @endif
+                                @if($news->district)
+                                    <span class="badge bg-secondary">🏛️ {{ $news->district->name }}</span>
+                                @endif
+                                @if($news->tehsil)
+                                    <span class="badge bg-secondary">🏛️ {{ $news->tehsil->name }}</span>
+                                @endif
+                                @if($news->block)
+                                    <span class="badge bg-secondary">🏛️ {{ $news->block->name }}</span>
+                                @endif
+                                @if(!$news->state && !$news->district && !$news->tehsil && !$news->block)
+                                    <span class="text-muted">📍 कोई स्थान निर्दिष्ट नहीं</span>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Summary -->
+                    @if($news->summary)
+                        <div class="alert alert-info">
+                            <strong>📌 सारांश:</strong><br>
+                            {{ $news->summary }}
+                        </div>
+                    @endif
+
+                    <!-- Body -->
+                    <div class="news-body">
+                        {!! $news->body !!}
+                    </div>
+
+                    <!-- Video -->
+                    @if($news->type == 'video' && $news->video_url)
+                        <div class="mt-4">
+                            <h5>🎬 वीडियो</h5>
+                            <div class="ratio ratio-16x9">
+                                <iframe src="{{ $news->video_url }}" allowfullscreen></iframe>
+                            </div>
+                        </div>
+                    @endif
+
+                    <!-- Short (Reels/Shorts) -->
+                    @if($news->type == 'short' && $news->video_url)
+                        <div class="mt-4">
+                            <h5>📱 शॉर्ट वीडियो</h5>
+                            <div class="ratio ratio-9x16" style="max-width: 400px; margin: 0 auto;">
+                                <iframe src="{{ $news->video_url }}" allowfullscreen></iframe>
+                            </div>
+                        </div>
+                    @endif
+
+                    <!-- Approval Info -->
+                    @if($news->approval_status == 'approved' || $news->approval_status == 'rejected')
+                        <div class="mt-4 pt-3 border-top">
+                            <h6 class="fw-bold">📋 अनुमोदन जानकारी</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p><strong>स्थिति:</strong> 
+                                        @if($news->approval_status == 'approved')
+                                            <span class="text-success">✅ स्वीकृत</span>
+                                        @else
+                                            <span class="text-danger">❌ अस्वीकृत</span>
+                                        @endif
+                                    </p>
+                                </div>
+                                <div class="col-md-6">
+                                    @if($news->approved_at)
+                                        <p><strong>अनुमोदित दिनांक:</strong> {{ $news->approved_at->format('d M Y, h:i A') }}</p>
+                                    @endif
+                                    @if($news->approver)
+                                        <p><strong>अनुमोदक:</strong> {{ $news->approver->name }}</p>
+                                    @endif
+                                </div>
+                            </div>
+                            @if($news->rejection_reason)
+                                <div class="alert alert-danger">
+                                    <strong>❌ अस्वीकृति कारण:</strong><br>
+                                    {{ $news->rejection_reason }}
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+
+                    <!-- SEO Info -->
+                    <div class="mt-4 pt-3 border-top">
+                        <h6 class="fw-bold">🔍 SEO जानकारी</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Slug:</strong> <code>{{ $news->slug }}</code></p>
+                                <p><strong>Alt Text:</strong> {{ $news->alt_text ?? 'N/A' }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>SEO Description:</strong> {{ $news->seo_description ?? 'N/A' }}</p>
+                                <p><strong>Type:</strong> {{ $news->type == 'video' ? '🎬 वीडियो' : ($news->type == 'short' ? '📱 शॉर्ट' : '📝 टेक्स्ट') }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="flex flex-wrap gap-3 mt-4">
-            <!-- ✅ Edit Button for ALL status -->
-            <a href="{{ route('reporter.news.edit', $news->id) }}" 
-               class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl transition">
-                ✏️ Edit & Resubmit
-            </a>
-            
-            @if($news->status != 'published')
-                <form method="POST" action="{{ route('reporter.news.destroy', $news->id) }}" 
-                      style="display:inline" 
-                      onsubmit="return confirm('क्या आप यह खबर डिलीट करना चाहते हैं? यह कार्रवाई वापस नहीं ली जा सकती।')">
-                    @csrf @method('DELETE')
-                    <button type="submit" 
-                            class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-xl transition">
-                        🗑️ डिलीट करें
-                    </button>
-                </form>
-            @endif
-
-            @if($news->status == 'published')
-                <a href="{{ route('news.show', $news->slug) }}" target="_blank" 
-                   class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition">
-                    🌐 लाइव देखें
-                </a>
-            @endif
-        </div>
-
-        <div class="bg-white rounded-xl p-4 mt-4 border border-gray-100 card-shadow">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center text-brand font-bold text-lg">
-                    {{ substr($news->user->name ?? 'R', 0, 1) }}
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <!-- Quick Actions -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">⚡ त्वरित कार्रवाई</h6>
                 </div>
-                <div>
-                    <p class="text-sm font-bold">{{ $news->user->name ?? 'Unknown' }}</p>
-                    <p class="text-xs text-gray-400">रिपोर्टर</p>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ route('reporter.news.edit', $news->id) }}" class="btn btn-warning">
+                            <i class="fas fa-edit"></i> संपादित करें
+                        </a>
+                        
+                        @if($news->status == 'published' || $news->status == 'rejected')
+                            <form action="{{ route('reporter.news.resubmit', $news->id) }}" method="POST">
+                                @csrf
+                                <button type="submit" class="btn btn-info w-100">
+                                    <i class="fas fa-redo"></i> पुनः सबमिट करें
+                                </button>
+                            </form>
+                        @endif
+                        
+                        <form action="{{ route('reporter.news.destroy', $news->id) }}" method="POST" 
+                              onsubmit="return confirm('क्या आप इस खबर को डिलीट करना चाहते हैं?');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-danger w-100">
+                                <i class="fas fa-trash"></i> डिलीट करें
+                            </button>
+                        </form>
+                        <a href="{{ route('reporter.news.index') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> सभी खबरें
+                        </a>
+                    </div>
                 </div>
-                <div class="ml-auto text-right">
-                    <p class="text-xs text-gray-400">सबमिट किया</p>
-                    <p class="text-xs text-gray-500">{{ $news->created_at->diffForHumans() }}</p>
+            </div>
+
+            <!-- Stats -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">📊 आंकड़े</h6>
+                </div>
+                <div class="card-body">
+                    <div class="text-center">
+                        <h3 class="text-primary">{{ number_format($news->views ?? 0) }}</h3>
+                        <p class="text-muted">कुल व्यूज</p>
+                        <hr>
+                        <p><strong>Status:</strong> {{ $news->status == 'published' ? '✅ प्रकाशित' : ($news->status == 'draft' ? '📝 ड्राफ्ट' : '⏳ समीक्षा के लिए') }}</p>
+                        <p><strong>Type:</strong> {{ $news->type == 'video' ? '🎬 वीडियो' : ($news->type == 'short' ? '📱 शॉर्ट' : '📝 टेक्स्ट') }}</p>
+                        @if($news->type != 'text' && $news->video_url)
+                            <p><strong>Video URL:</strong> <a href="{{ $news->video_url }}" target="_blank">देखें</a></p>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reporter Info (if not already shown in main) -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">👤 रिपोर्टर</h6>
+                </div>
+                <div class="card-body text-center">
+                    @if($news->user && $news->user->photo_url)
+                        <img src="{{ $news->user->photo_url }}" alt="{{ $news->user->name }}" 
+                             style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
+                    @else
+                        <div style="width: 80px; height: 80px; border-radius: 50%; background: #ddd; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 32px;">
+                            👤
+                        </div>
+                    @endif
+                    <h6>{{ $news->user->name ?? 'N/A' }}</h6>
+                    <p class="text-muted small">{{ $news->user->email ?? '' }}</p>
+                    @if($news->user && $news->user->bio)
+                        <p class="small">{{ Str::limit($news->user->bio, 100) }}</p>
+                    @endif
+                    @if($news->user && $news->user->getLocationString())
+                        <p class="small text-muted">📍 {{ $news->user->getLocationString() }}</p>
+                    @endif
                 </div>
             </div>
         </div>
-
-    </main>
-
-    <footer class="text-center py-4 text-xs text-gray-400 border-t border-gray-200 mt-6">
-        द पब्लिक एक्सप्रेस - रिपोर्टर पैनल
-    </footer>
-
-</body>
-</html>
+    </div>
+</div>
+@endsection

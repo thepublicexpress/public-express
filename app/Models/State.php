@@ -2,19 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class State extends Model
 {
-    use HasFactory;
-
-    protected $table = 'states';
-    
     protected $fillable = [
         'name',
-        'name_hi',
         'slug',
+        'code',
+        'status',
         'is_active'
     ];
 
@@ -22,26 +18,35 @@ class State extends Model
         'is_active' => 'boolean',
     ];
 
-    // ===== ACCESSORS =====
-    public function getDisplayNameAttribute()
+    /**
+     * ✅ Relationship with News
+     */
+    public function news()
     {
-        return $this->name_hi ?? $this->name;
+        return $this->hasMany(News::class);
     }
 
-    // ===== RELATIONSHIPS =====
+    /**
+     * ✅ Relationship with Users (Reporters)
+     */
+    public function users()
+    {
+        return $this->hasMany(User::class);
+    }
+
+    /**
+     * ✅ Relationship with Districts
+     */
     public function districts()
     {
         return $this->hasMany(District::class);
     }
 
-    public function tehsils()
-    {
-        return $this->hasManyThrough(Tehsil::class, District::class);
-    }
-
-    // ===== SCOPES =====
+    /**
+     * ✅ Scope for active states
+     */
     public function scopeActive($query)
     {
-        return $query->where('is_active', true);
+        return $query->where('is_active', 1);
     }
 }

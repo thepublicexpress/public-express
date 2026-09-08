@@ -1,0 +1,28 @@
+# द पब्लिक एक्सप्रेस - हाइपरलोकल न्यूज़ प्लेटफॉर्म
+
+## About
+द पब्लिक एक्सप्रेस उत्तर प्रदेश की सबसे तेज़ हाइपरलोकल न्यूज़ वेबसाइट है। हम हर कस्बे, गाँव और सिटी की ताज़ा खबरें, राजनीति, अपराध, शिक्षा और खेल समाचार प्रकाशित करते हैं।
+
+## Website Links
+- Home: https://thepublicexpress.com/
+- Leaderboard: https://thepublicexpress.com/leaderboard
+- About: https://thepublicexpress.com/about
+- Contact: https://thepublicexpress.com/contact
+- Privacy Policy: https://thepublicexpress.com/privacy
+- Terms: https://thepublicexpress.com/terms
+
+## Categories
+- Politics: https://thepublicexpress.com/category/politics
+- Crime: https://thepublicexpress.com/category/crime
+- Education: https://thepublicexpress.com/category/education
+- Sports: https://thepublicexpress.com/category/sports
+- State: https://thepublicexpress.com/category/state
+- National: https://thepublicexpress.com/category/national
+
+## Latest News
+- Rahul Sankrityayan's village Kanaila: https://thepublicexpress.com/news/rahul-sankrityayan-kanaila-padayatra
+- Police encounter with loot accused: https://thepublicexpress.com/news/police-encounter-loot-arrested
+- Youth found hanging at sister's wedding: https://thepublicexpress.com/news/youth-hanged-tree
+
+## Contact
+Email: admin@thepublicexpress.com

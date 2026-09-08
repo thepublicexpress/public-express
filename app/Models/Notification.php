@@ -1,5 +1,4 @@
 <?php
-// app/Models/Notification.php
 
 namespace App\Models;
 
@@ -7,17 +6,24 @@ use Illuminate\Database\Eloquent\Model;
 
 class Notification extends Model
 {
+    protected $table = 'notifications';
+
     protected $fillable = [
         'user_id',
-        'news_id',
-        'type',
+        'news_id',      // ✅ नया Column – किस खबर से संबंधित है
+        'type',         // admin, reporter, subscriber
         'title',
-        'message',
-        'is_read'
+        'body',
+        'message',      // ✅ आपकी Table में message भी है
+        'data',         // JSON – extra data (news_id, url, etc.)
+        'is_read',      // ✅ boolean (0/1)
+        'read_at',      // ✅ timestamp
     ];
 
     protected $casts = [
-        'is_read' => 'boolean'
+        'data' => 'array',
+        'is_read' => 'boolean',
+        'read_at' => 'datetime',
     ];
 
     // ===== RELATIONSHIPS =====
@@ -34,32 +40,26 @@ class Notification extends Model
     // ===== SCOPES =====
     public function scopeUnread($query)
     {
-        return $query->where('is_read', false);
-    }
-
-    public function scopeRead($query)
-    {
-        return $query->where('is_read', true);
-    }
-
-    // ===== HELPERS =====
-    public function markAsRead()
-    {
-        $this->is_read = true;
-        $this->save();
-        return $this;
-    }
-
-    public function markAsUnread()
-    {
-        $this->is_read = false;
-        $this->save();
-        return $this;
+        return $query->where('is_read', 0)->whereNull('read_at');
     }
 
     // ===== ACCESSORS =====
-    public function getTimeAgoAttribute()
+    public function getIsReadAttribute($value)
     {
-        return $this->created_at ? $this->created_at->diffForHumans() : 'Just now';
+        return (bool) $value;
+    }
+
+    // ===== METHODS =====
+    public function markAsRead()
+    {
+        $this->update([
+            'is_read' => 1,
+            'read_at' => now(),
+        ]);
+    }
+
+    public function isRead()
+    {
+        return $this->is_read == 1 || !is_null($this->read_at);
     }
 }

@@ -1,112 +1,77 @@
 <?php
-// app/Http/Controllers/Admin/UserController.php
 
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\State;
 use App\Models\District;
 use App\Models\Tehsil;
 use App\Models\Block;
-use App\Models\Category;
-use App\Models\ReporterAssignment;
-use App\Models\ReporterPoint;
+use App\Models\Category; // ✅ NewsCategory की जगह Category
+use App\Models\News;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
 
 class UserController extends Controller
 {
     /**
-     * Display a listing of the users.
+     * Display a listing of users
      */
     public function index(Request $request)
     {
         $query = User::query();
 
-        // Search filter
-        if ($request->filled('search')) {
+        if ($request->has('role') && $request->role != '') {
+            $query->where('role', $request->role);
+        }
+
+        if ($request->has('search') && $request->search != '') {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")
                   ->orWhere('phone', 'like', "%{$search}%");
             });
         }
 
-        // Role filter
-        if ($request->filled('role')) {
-            $query->where('role', $request->role);
-        }
+        $users = $query->orderBy('created_at', 'desc')->paginate(20);
+        $roles = $this->getAllRoles();
 
-        // Status filter
-        if ($request->filled('status')) {
-            $query->where('is_active', $request->status == 'active');
-        }
-
-        // Approval filter
-        if ($request->filled('approved')) {
-            $query->where('is_approved', $request->approved == 'approved');
-        }
-
-        $users = $query->latest()->paginate(20);
-
-        // Stats
-        $stats = [
-            'total' => User::count(),
-            'admins' => User::whereIn('role', ['admin', 'super_admin', 'state_admin', 'district_admin', 'tehsil_admin', 'block_admin'])->count(),
-            'reporters' => User::whereIn('role', ['reporter', 'state_reporter', 'district_reporter', 'tehsil_reporter', 'block_reporter', 'national_reporter'])->count(),
-            'subscribers' => User::where('role', 'subscriber')->count(),
-            'pending' => User::where('is_approved', false)->count(),
-            'active' => User::where('is_active', true)->count(),
-        ];
-
-        $roles = ['super_admin', 'admin', 'state_admin', 'district_admin', 'tehsil_admin', 'block_admin', 
-                  'state_reporter', 'district_reporter', 'tehsil_reporter', 'block_reporter', 'national_reporter', 
-                  'reporter', 'subscriber'];
-
-        return view('admin.users.index', compact('users', 'stats', 'roles'));
+        return view('admin.users.index', compact('users', 'roles'));
     }
 
-    /**
-     * Show the form for creating a new user.
-     */
     public function create()
     {
-        $roles = ['super_admin', 'admin', 'state_admin', 'district_admin', 'tehsil_admin', 'block_admin', 
-                  'state_reporter', 'district_reporter', 'tehsil_reporter', 'block_reporter', 'national_reporter', 
-                  'reporter', 'subscriber'];
-        $states = State::where('is_active', true)->get();
-        $districts = District::where('is_active', true)->get();
-        $tehsils = Tehsil::where('is_active', true)->get();
-        $blocks = Block::where('is_active', true)->get();
-        $categories = Category::where('is_active', true)->get();
-
-        return view('admin.users.create', compact('roles', 'states', 'districts', 'tehsils', 'blocks', 'categories'));
+        $roles = $this->getAllRoles();
+        $states = State::where('is_active', 1)->orderBy('name')->get();
+        $categories = Category::where('is_active', 1)->orderBy('name')->get(); // ✅ Category
+        return view('admin.users.create', compact('roles', 'states', 'categories'));
     }
 
-    /**
-     * Store a newly created user.
-     */
     public function store(Request $request)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'phone' => 'nullable|string|max:20',
-            'password' => 'required|min:8|confirmed',
-            'role' => 'required|in:super_admin,admin,state_admin,district_admin,tehsil_admin,block_admin,state_reporter,district_reporter,tehsil_reporter,block_reporter,national_reporter,reporter,subscriber',
+            'email' => 'required|email|unique:users',
+            'phone' => 'nullable|string|max:50',
+            'password' => 'required|string|min:8',
+            'role' => 'required|string|max:50',
             'assigned_state_id' => 'nullable|exists:states,id',
             'assigned_district_id' => 'nullable|exists:districts,id',
             'assigned_tehsil_id' => 'nullable|exists:tehsils,id',
             'assigned_block_id' => 'nullable|exists:blocks,id',
-            'assigned_category_id' => 'nullable|exists:categories,id',
-            'assigned_categories' => 'nullable|array',
-            'can_approve' => 'nullable|boolean',
-            'approval_level' => 'nullable|in:none,block,tehsil,district,state,national',
             'is_active' => 'nullable|boolean',
             'is_approved' => 'nullable|boolean',
         ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
 
         $user = User::create([
             'name' => $request->name,
@@ -118,252 +83,276 @@ class UserController extends Controller
             'assigned_district_id' => $request->assigned_district_id,
             'assigned_tehsil_id' => $request->assigned_tehsil_id,
             'assigned_block_id' => $request->assigned_block_id,
-            'assigned_category_id' => $request->assigned_category_id,
-            'assigned_categories' => $request->assigned_categories ? json_encode($request->assigned_categories) : null,
-            'can_approve' => $request->can_approve ?? false,
-            'approval_level' => $request->approval_level ?? 'none',
-            'is_active' => $request->is_active ?? true,
-            'is_approved' => $request->is_approved ?? false,
+            'is_active' => $request->is_active ?? 1,
+            'is_approved' => $request->is_approved ?? 1,
+            'is_verified' => 1,
+            'points' => 0,
+            'wallet_balance' => 0,
         ]);
 
-        // Create reporter assignment if reporter
-        if (in_array($request->role, ['reporter', 'state_reporter', 'district_reporter', 'tehsil_reporter', 'block_reporter', 'national_reporter'])) {
-            ReporterAssignment::create([
-                'reporter_id' => $user->id,
-                'assigned_by' => auth()->id(),
-                'assigned_state_id' => $request->assigned_state_id,
-                'assigned_district_id' => $request->assigned_district_id,
-                'assigned_tehsil_id' => $request->assigned_tehsil_id,
-                'assigned_block_id' => $request->assigned_block_id,
-                'assigned_category_id' => $request->assigned_category_id,
-                'assigned_categories' => $request->assigned_categories ? json_encode($request->assigned_categories) : null,
-                'is_active' => true,
-                'assigned_at' => now(),
-            ]);
-        }
-
         return redirect()->route('admin.users.index')
-            ->with('success', 'User created successfully!');
+            ->with('success', '✅ User created successfully!');
     }
 
     /**
      * Display the specified user.
      */
-    public function show(User $user)
+    public function show($id)
     {
-        $user->load(['state', 'district', 'tehsil', 'block', 'category']);
-        $news = $user->news()->latest()->paginate(10);
-        $assignments = ReporterAssignment::where('reporter_id', $user->id)->get();
+        $user = User::with(['assignedState', 'assignedDistrict', 'assignedTehsil', 'assignedBlock'])
+            ->findOrFail($id);
 
-        return view('admin.users.show', compact('user', 'news', 'assignments'));
+        $news = News::where('user_id', $user->id)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at', 'desc')
+            ->paginate(10);
+
+        $assignments = News::where('user_id', $user->id)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        $totalNews = News::where('user_id', $user->id)->whereNull('deleted_at')->count();
+        $publishedNews = News::where('user_id', $user->id)->whereNull('deleted_at')->where('status', 'published')->count();
+        $pendingNews = News::where('user_id', $user->id)->whereNull('deleted_at')->where('status', 'pending')->count();
+        $rejectedNews = News::where('user_id', $user->id)->whereNull('deleted_at')->where('status', 'rejected')->count();
+        $totalViews = News::where('user_id', $user->id)->whereNull('deleted_at')->sum('views');
+
+        $categoryNames = Category::pluck('name', 'id')->toArray(); // ✅ Category
+
+        return view('admin.users.show', compact(
+            'user',
+            'news',
+            'assignments',
+            'totalNews',
+            'publishedNews',
+            'pendingNews',
+            'rejectedNews',
+            'totalViews',
+            'categoryNames'
+        ));
     }
 
-    /**
-     * Show the form for editing the specified user.
-     */
-    public function edit(User $user)
+    public function edit($id)
     {
-        $roles = ['super_admin', 'admin', 'state_admin', 'district_admin', 'tehsil_admin', 'block_admin', 
-                  'state_reporter', 'district_reporter', 'tehsil_reporter', 'block_reporter', 'national_reporter', 
-                  'reporter', 'subscriber'];
-        $states = State::where('is_active', true)->get();
-        $districts = District::where('is_active', true)->get();
-        $tehsils = Tehsil::where('is_active', true)->get();
-        $blocks = Block::where('is_active', true)->get();
-        $categories = Category::where('is_active', true)->get();
+        $user = User::findOrFail($id);
+        $roles = $this->getAllRoles();
+        $states = State::where('is_active', 1)->orderBy('name')->get();
+        $categories = Category::where('is_active', 1)->orderBy('name')->get(); // ✅ Category
 
-        // Get assigned categories
-        $assignedCategories = [];
-        if ($user->assigned_categories) {
-            $assignedCategories = is_array($user->assigned_categories) 
-                ? $user->assigned_categories 
-                : json_decode($user->assigned_categories, true);
+        $districts = [];
+        if ($user->assigned_state_id) {
+            $districts = District::where('state_id', $user->assigned_state_id)
+                ->where('is_active', 1)
+                ->orderBy('name')
+                ->get();
+        }
+
+        $tehsils = [];
+        if ($user->assigned_district_id) {
+            $tehsils = Tehsil::where('district_id', $user->assigned_district_id)
+                ->where('is_active', 1)
+                ->orderBy('name')
+                ->get();
+        }
+
+        $blocks = [];
+        if ($user->assigned_tehsil_id) {
+            $blocks = Block::where('tehsil_id', $user->assigned_tehsil_id)
+                ->where('is_active', 1)
+                ->orderBy('name')
+                ->get();
         }
 
         return view('admin.users.edit', compact(
-            'user', 'roles', 'states', 'districts', 'tehsils', 'blocks', 'categories', 'assignedCategories'
+            'user', 'roles', 'states', 'categories',
+            'districts', 'tehsils', 'blocks'
         ));
     }
 
     /**
-     * Update the specified user.
+     * ✅ UPDATE USER (with Bio & Photo)
      */
-    public function update(Request $request, User $user)
+    public function update(Request $request, $id)
     {
-        $request->validate([
+        $user = User::findOrFail($id);
+
+        // ✅ Validation – bio & photo added
+        $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email,' . $user->id,
-            'phone' => 'nullable|string|max:20',
-            'role' => 'required|in:super_admin,admin,state_admin,district_admin,tehsil_admin,block_admin,state_reporter,district_reporter,tehsil_reporter,block_reporter,national_reporter,reporter,subscriber',
+            'email' => 'required|email|unique:users,email,' . $id,
+            'phone' => 'nullable|string|max:50',
+            'bio'   => 'nullable|string',                        // ✅ Bio
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // ✅ Photo
+            'password' => 'nullable|string|min:8',
+            'role' => 'required|string|max:50',
             'assigned_state_id' => 'nullable|exists:states,id',
             'assigned_district_id' => 'nullable|exists:districts,id',
             'assigned_tehsil_id' => 'nullable|exists:tehsils,id',
             'assigned_block_id' => 'nullable|exists:blocks,id',
-            'assigned_category_id' => 'nullable|exists:categories,id',
-            'assigned_categories' => 'nullable|array',
-            'can_approve' => 'nullable|boolean',
-            'approval_level' => 'nullable|in:none,block,tehsil,district,state,national',
             'is_active' => 'nullable|boolean',
             'is_approved' => 'nullable|boolean',
-            'is_verified' => 'nullable|boolean',
-            'password' => 'nullable|min:8|confirmed',
         ]);
 
-        $user->name = $request->name;
-        $user->email = $request->email;
-        $user->phone = $request->phone;
-        $user->role = $request->role;
-        $user->assigned_state_id = $request->assigned_state_id;
-        $user->assigned_district_id = $request->assigned_district_id;
-        $user->assigned_tehsil_id = $request->assigned_tehsil_id;
-        $user->assigned_block_id = $request->assigned_block_id;
-        $user->assigned_category_id = $request->assigned_category_id;
-        $user->assigned_categories = $request->assigned_categories ? json_encode($request->assigned_categories) : null;
-        $user->can_approve = $request->has('can_approve');
-        $user->approval_level = $request->approval_level ?? 'none';
-        $user->is_active = $request->has('is_active');
-        $user->is_approved = $request->has('is_approved');
-        $user->is_verified = $request->has('is_verified');
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        // ✅ Basic data (including bio)
+        $data = [
+            'name' => $request->name,
+            'email' => $request->email,
+            'phone' => $request->phone,
+            'bio'   => $request->bio,                // ✅ Bio save
+            'role' => $request->role,
+            'assigned_state_id' => $request->assigned_state_id,
+            'assigned_district_id' => $request->assigned_district_id,
+            'assigned_tehsil_id' => $request->assigned_tehsil_id,
+            'assigned_block_id' => $request->assigned_block_id,
+            'is_active' => $request->is_active ?? 0,
+            'is_approved' => $request->is_approved ?? 0,
+        ];
 
         if ($request->filled('password')) {
-            $user->password = Hash::make($request->password);
+            $data['password'] = Hash::make($request->password);
         }
 
-        $user->save();
+        // ✅ Photo upload (if provided)
+        if ($request->hasFile('photo')) {
+            // Delete old photo (if exists)
+            if ($user->photo && file_exists(public_path($user->photo))) {
+                unlink(public_path($user->photo));
+            }
 
-        // Update reporter assignment
-        if (in_array($request->role, ['reporter', 'state_reporter', 'district_reporter', 'tehsil_reporter', 'block_reporter', 'national_reporter'])) {
-            ReporterAssignment::updateOrCreate(
-                ['reporter_id' => $user->id],
-                [
-                    'assigned_by' => auth()->id(),
-                    'assigned_state_id' => $request->assigned_state_id,
-                    'assigned_district_id' => $request->assigned_district_id,
-                    'assigned_tehsil_id' => $request->assigned_tehsil_id,
-                    'assigned_block_id' => $request->assigned_block_id,
-                    'assigned_category_id' => $request->assigned_category_id,
-                    'assigned_categories' => $request->assigned_categories ? json_encode($request->assigned_categories) : null,
-                    'is_active' => true,
-                    'assigned_at' => now(),
-                ]
-            );
-        } else {
-            ReporterAssignment::where('reporter_id', $user->id)->delete();
+            // Generate new filename & move to public/uploads/reporters/
+            $fileName = time() . '_' . $request->file('photo')->getClientOriginalName();
+            $request->file('photo')->move(public_path('uploads/reporters'), $fileName);
+            $data['photo'] = 'uploads/reporters/' . $fileName;
         }
+
+        // ✅ Update user with all data
+        $user->update($data);
 
         return redirect()->route('admin.users.index')
-            ->with('success', 'User updated successfully!');
+            ->with('success', '✅ User updated successfully with Bio and Photo!');
     }
 
-    /**
-     * Toggle user active status.
-     */
-    public function toggleActive(User $user)
+    public function destroy($id)
     {
+        $user = User::findOrFail($id);
+        $user->delete();
+
+        return redirect()->route('admin.users.index')
+            ->with('success', '✅ User deleted successfully!');
+    }
+
+    public function toggleActive($id)
+    {
+        $user = User::findOrFail($id);
         $user->is_active = !$user->is_active;
         $user->save();
 
-        $status = $user->is_active ? 'activated' : 'deactivated';
-        return back()->with('success', "User {$status} successfully!");
+        return redirect()->back()
+            ->with('success', '✅ User status updated!');
     }
 
-    /**
-     * Approve user.
-     */
-    public function approve(User $user)
+    public function approve($id)
     {
-        $user->is_approved = true;
-        $user->is_active = true;
+        $user = User::findOrFail($id);
+        $user->is_approved = 1;
         $user->save();
 
-        return back()->with('success', 'User approved successfully!');
+        return redirect()->back()
+            ->with('success', '✅ User approved successfully!');
     }
 
-    /**
-     * Reject user.
-     */
-    public function reject(User $user)
+    public function reject($id)
     {
-        $user->is_approved = false;
-        $user->is_active = false;
+        $user = User::findOrFail($id);
+        $user->is_approved = 0;
         $user->save();
 
-        return back()->with('success', 'User rejected successfully!');
+        return redirect()->back()
+            ->with('success', '✅ User rejected!');
     }
 
-    /**
-     * Verify reporter.
-     */
-    public function verifyReporter(User $user)
+    public function verifyReporter($id)
     {
-        $user->is_verified = !$user->is_verified;
+        $user = User::findOrFail($id);
+        $user->is_verified = 1;
         $user->save();
 
-        $status = $user->is_verified ? 'verified' : 'unverified';
-        return back()->with('success', "Reporter {$status} successfully!");
+        return redirect()->back()
+            ->with('success', '✅ Reporter verified successfully!');
     }
 
-    /**
-     * Add points to reporter.
-     */
-    public function addPoints(Request $request, User $user)
+    public function addPoints(Request $request, $id)
     {
-        $request->validate([
-            'points' => 'required|integer|min:1|max:1000',
-            'reason' => 'required|string|max:255',
-        ]);
+        $request->validate(['points' => 'required|integer|min:1']);
+        $user = User::findOrFail($id);
+        $user->points += $request->points;
+        $user->save();
 
-        $user->increment('points', $request->points);
-
-        ReporterPoint::create([
-            'user_id' => $user->id,
-            'points' => $request->points,
-            'reason' => $request->reason,
-            'action' => 'admin_added',
-        ]);
-
-        return back()->with('success', "{$request->points} points added successfully!");
+        return redirect()->back()
+            ->with('success', "✅ {$request->points} points added successfully!");
     }
 
-    /**
-     * Deduct points from reporter.
-     */
-    public function deductPoints(Request $request, User $user)
+    public function deductPoints(Request $request, $id)
     {
-        $request->validate([
-            'points' => 'required|integer|min:1|max:' . ($user->points ?? 0),
-            'reason' => 'required|string|max:255',
-        ]);
+        $request->validate(['points' => 'required|integer|min:1']);
+        $user = User::findOrFail($id);
+        $user->points = max(0, $user->points - $request->points);
+        $user->save();
 
-        $user->decrement('points', $request->points);
-
-        ReporterPoint::create([
-            'user_id' => $user->id,
-            'points' => -$request->points,
-            'reason' => $request->reason,
-            'action' => 'admin_deducted',
-        ]);
-
-        return back()->with('success', "{$request->points} points deducted successfully!");
+        return redirect()->back()
+            ->with('success', "✅ {$request->points} points deducted!");
     }
 
-    /**
-     * Remove the specified user.
-     */
-    public function destroy(User $user)
+    private function getAllRoles()
     {
-        if ($user->role === 'super_admin' || $user->role === 'admin') {
-            return back()->with('error', 'Cannot delete admin user!');
-        }
+        return [
+            'super_admin' => 'Super Admin',
+            'admin' => 'Admin',
+            'state_admin' => 'State Admin',
+            'district_admin' => 'District Admin',
+            'tehsil_admin' => 'Tehsil Admin',
+            'block_admin' => 'Block Admin',
+            'national_reporter' => 'National Reporter',
+            'state_reporter' => 'State Reporter',
+            'district_reporter' => 'District Reporter',
+            'tehsil_reporter' => 'Tehsil Reporter',
+            'block_reporter' => 'Block Reporter',
+            'subscriber' => 'Subscriber',
+        ];
+    }
 
-        if ($user->id === auth()->id()) {
-            return back()->with('error', 'You cannot delete your own account!');
-        }
+    public function getDistricts($stateId)
+    {
+        $districts = District::where('state_id', $stateId)
+            ->where('is_active', 1)
+            ->orderBy('name')
+            ->get(['id', 'name', 'name_hi']);
+        return response()->json($districts);
+    }
 
-        ReporterAssignment::where('reporter_id', $user->id)->delete();
+    public function getTehsils($districtId)
+    {
+        $tehsils = Tehsil::where('district_id', $districtId)
+            ->where('is_active', 1)
+            ->orderBy('name')
+            ->get(['id', 'name', 'name_hi']);
+        return response()->json($tehsils);
+    }
 
-        $user->delete();
-
-        return back()->with('success', 'User deleted successfully!');
+    public function getBlocks($tehsilId)
+    {
+        $blocks = Block::where('tehsil_id', $tehsilId)
+            ->where('is_active', 1)
+            ->orderBy('name')
+            ->get(['id', 'name', 'name_hi']);
+        return response()->json($blocks);
     }
 }

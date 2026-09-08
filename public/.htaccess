@@ -1,3 +1,6 @@
+# ============================================================
+# LARAVEL REWRITE RULES
+# ============================================================
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
@@ -5,21 +8,165 @@
 
     RewriteEngine On
 
+    # ✅ Allow direct access to images
+    RewriteRule ^uploads/.*\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$ - [L]
+    RewriteRule ^images/.*\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$ - [L]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-    # Handle X-XSRF-Token Header
-    RewriteCond %{HTTP:x-xsrf-token} .
-    RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
-
-    # Redirect Trailing Slashes If Not A Folder...
+    # Redirect Trailing Slashes
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
-    # Send Requests To Front Controller...
+    # Send Requests To Front Controller
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# ============================================================
+# ✅ GZIP COMPRESSION (Performance - Reduce CSS/JS size)
+# ============================================================
+<IfModule mod_deflate.c>
+    <IfModule mod_setenvif.c>
+        <IfModule mod_headers.c>
+            SetEnvIfNoCase ^(Accept-EncodXng|X-cept-Encoding|X{15}|~{15}|-{15})$ ^((gzip|deflate)\s*,?\s*)+|[X~-]{4,13}$ HAVE_Accept-Encoding
+            RequestHeader append Accept-Encoding "gzip,deflate" env=HAVE_Accept-Encoding
+        </IfModule>
+    </IfModule>
+
+    <IfModule mod_filter.c>
+        AddOutputFilterByType DEFLATE application/atom+xml \
+                                      application/javascript \
+                                      application/json \
+                                      application/ld+json \
+                                      application/manifest+json \
+                                      application/rdf+xml \
+                                      application/rss+xml \
+                                      application/schema+json \
+                                      application/vnd.geo+json \
+                                      application/vnd.ms-fontobject \
+                                      application/x-font-ttf \
+                                      application/x-javascript \
+                                      application/x-web-app-manifest+json \
+                                      application/xhtml+xml \
+                                      application/xml \
+                                      font/eot \
+                                      font/opentype \
+                                      font/otf \
+                                      image/bmp \
+                                      image/svg+xml \
+                                      image/vnd.microsoft.icon \
+                                      image/x-icon \
+                                      text/cache-manifest \
+                                      text/css \
+                                      text/html \
+                                      text/javascript \
+                                      text/plain \
+                                      text/vcard \
+                                      text/vnd.rim.location.xloc \
+                                      text/vtt \
+                                      text/x-component \
+                                      text/x-cross-domain-policy \
+                                      text/xml
+    </IfModule>
+</IfModule>
+
+# ============================================================
+# ✅ SECURITY HEADERS
+# ============================================================
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "DENY"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(self), microphone=(), camera=()"
+    
+    <If "%{HTTPS} == 'on'">
+        Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    </If>
+    
+    <FilesMatch "\.(html|php)$">
+        Header always set Cache-Control "public, max-age=3600, must-revalidate"
+    </FilesMatch>
+</IfModule>
+
+# ============================================================
+# ✅ CACHE CONTROL
+# ============================================================
+<IfModule mod_expires.c>
+    ExpiresActive On
+    
+    # Images - 1 year
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/x-icon "access plus 1 year"
+    
+    # CSS, JavaScript - 1 month
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType application/x-javascript "access plus 1 month"
+    
+    # Fonts - 1 year
+    ExpiresByType font/woff "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
+    ExpiresByType application/font-woff "access plus 1 year"
+    ExpiresByType application/font-woff2 "access plus 1 year"
+</IfModule>
+
+# ============================================================
+# ✅ CACHE FALLBACK
+# ============================================================
+<IfModule !mod_expires.c>
+    <FilesMatch "\.(jpg|jpeg|png|gif|webp|svg|ico|css|js|woff|woff2|ttf|eot)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>
+
+# ============================================================
+# ✅ REMOVE ETAGS
+# ============================================================
+<IfModule mod_headers.c>
+    <FilesMatch "\.(jpg|jpeg|png|gif|webp|svg|ico|css|js|woff|woff2|ttf|eot)$">
+        FileETag None
+        Header unset ETag
+    </FilesMatch>
+</IfModule>
+
+# ============================================================
+# ✅ PREVENT DIRECTORY LISTING
+# ============================================================
+Options -Indexes
+
+# ============================================================
+# ✅ PROTECT SENSITIVE FILES
+# ============================================================
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "^(composer\.json|composer\.lock|package\.json|package-lock\.json|.env|.env\.example|artisan)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# ============================================================
+# ✅ BLOCK BAD BOTS
+# ============================================================
+<IfModule mod_rewrite.c>
+    RewriteCond %{HTTP_USER_AGENT} (semrush|ahrefs|majestic|rogerbot|mj12bot|dotbot) [NC]
+    RewriteRule ^ - [F,L]
+</IfModule>
+
+# ============================================================
+# ✅ HANDLE 404 ERRORS
+# ============================================================
+ErrorDocument 404 /index.php
+ErrorDocument 403 /index.php
+ErrorDocument 500 /index.php

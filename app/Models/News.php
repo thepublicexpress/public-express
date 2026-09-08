@@ -1,17 +1,20 @@
 <?php
-// app/Models/News.php
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\State;
+use App\Models\District;
+use App\Models\Tehsil;
+use App\Models\Block;
+use App\Models\Category;
+use App\Models\User;
+use Illuminate\Support\Str;
 
 class News extends Model
 {
-    use HasFactory, SoftDeletes;
-
-    protected $table = 'news';
+    use SoftDeletes;
 
     protected $fillable = [
         'user_id',
@@ -25,54 +28,276 @@ class News extends Model
         'summary',
         'body',
         'featured_image',
+        'alt_text',
+        'seo_description',
         'type',
         'video_url',
-        'status',
-        'rejection_reason',
-        'views',
-        'likes',
-        'shares',
         'is_breaking',
         'is_featured',
-        'is_national',
-        'is_state',
-        'location_required',
-        'published_at',
+        'status',           // pending, published, rejected, draft
+        'approval_status',  // pending, approved, rejected
         'approved_by',
-        'approved_by_level',
-        // ===== HYPERLOCAL FIELDS =====
-        'latitude',
-        'longitude',
-        'location_radius',
-        'is_hyperlocal',
+        'approved_at',
+        'rejected_at',
+        'rejection_reason',
+        'approval_level',   // block, tehsil, district, state, admin
+        'published_at',
+        'views',
+        'meta_title',
+        'meta_description',
+        'meta_keywords',
+        'canonical_url',
     ];
 
     protected $casts = [
-        'published_at' => 'datetime',
         'is_breaking' => 'boolean',
         'is_featured' => 'boolean',
-        'is_national' => 'boolean',
-        'is_state' => 'boolean',
-        'location_required' => 'boolean',
-        'is_hyperlocal' => 'boolean',
+        'published_at' => 'datetime',
+        'approved_at' => 'datetime',
+        'rejected_at' => 'datetime',
         'views' => 'integer',
-        'likes' => 'integer',
-        'shares' => 'integer',
-        'latitude' => 'decimal:8',
-        'longitude' => 'decimal:8',
-        'location_radius' => 'integer',
     ];
 
-    // ===== RELATIONSHIPS =====
-    
+    // ============================================================
+    // ✅ Slug Mutator (SEO-friendly slugs)
+    // ============================================================
+    public function setSlugAttribute($value)
+    {
+        // Strip all non-ASCII characters (keep only A-Z, a-z, 0-9, and hyphen)
+        $clean = preg_replace('/[^A-Za-z0-9-]+/', '-', $value);
+        $this->attributes['slug'] = strtolower(trim($clean, '-'));
+    }
+
+    // ============================================================
+    // ✅ BOOT METHOD - Auto-generate SEO fields
+    // ============================================================
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($news) {
+            // Auto-generate alt_text if not provided
+            if (empty($news->alt_text) && !empty($news->featured_image)) {
+                $news->alt_text = self::generateAltText($news->title);
+            }
+            
+            // Auto-generate SEO description if not provided
+            if (empty($news->seo_description) && !empty($news->summary)) {
+                $news->seo_description = self::generateSeoDescription($news->summary);
+            } elseif (empty($news->seo_description) && !empty($news->body)) {
+                $news->seo_description = self::generateSeoDescription($news->body);
+            }
+            
+            // Auto-generate meta_title if not provided
+            if (empty($news->meta_title)) {
+                $news->meta_title = self::generateMetaTitle($news->title);
+            }
+            
+            // Auto-generate meta_description if not provided
+            if (empty($news->meta_description) && !empty($news->summary)) {
+                $news->meta_description = self::generateMetaDescription($news->summary);
+            } elseif (empty($news->meta_description) && !empty($news->body)) {
+                $news->meta_description = self::generateMetaDescription($news->body);
+            }
+            
+            // Auto-generate meta_keywords if not provided
+            if (empty($news->meta_keywords)) {
+                $news->meta_keywords = self::generateMetaKeywords($news->title, $news->category_id);
+            }
+        });
+
+        static::updating(function ($news) {
+            // Update alt_text if featured_image changed and alt_text is empty
+            if ($news->isDirty('featured_image') && empty($news->alt_text) && !empty($news->featured_image)) {
+                $news->alt_text = self::generateAltText($news->title);
+            }
+            
+            // Update SEO description if summary changed
+            if ($news->isDirty('summary') && !empty($news->summary)) {
+                $news->seo_description = self::generateSeoDescription($news->summary);
+                $news->meta_description = self::generateMetaDescription($news->summary);
+            }
+            
+            // Update meta_title if title changed
+            if ($news->isDirty('title') && !empty($news->title)) {
+                $news->meta_title = self::generateMetaTitle($news->title);
+                $news->meta_keywords = self::generateMetaKeywords($news->title, $news->category_id);
+            }
+        });
+    }
+
+    // ============================================================
+    // ✅ SEO GENERATORS
+    // ============================================================
+
+    /**
+     * Generate ALT text for featured image
+     */
+    public static function generateAltText($title, $imageNumber = 1)
+    {
+        $siteName = self::getSiteName();
+        $alt = strip_tags($title);
+        $alt = Str::limit($alt, 90);
+        
+        if ($imageNumber > 1) {
+            $alt .= ' - चित्र ' . $imageNumber;
+        }
+        
+        $alt .= ' | ' . $siteName;
+        return $alt;
+    }
+
+    /**
+     * Generate SEO Description from summary or body
+     */
+    public static function generateSeoDescription($text)
+    {
+        $clean = strip_tags($text);
+        $clean = preg_replace('/\s+/', ' ', $clean);
+        return Str::limit($clean, 160);
+    }
+
+    /**
+     * Generate Meta Title
+     */
+    public static function generateMetaTitle($title)
+    {
+        $siteName = self::getSiteName();
+        $title = strip_tags($title);
+        
+        if (strlen($title) > 60) {
+            $title = Str::limit($title, 55);
+        }
+        
+        return $title . ' - ' . $siteName;
+    }
+
+    /**
+     * Generate Meta Description
+     */
+    public static function generateMetaDescription($text)
+    {
+        $clean = strip_tags($text);
+        $clean = preg_replace('/\s+/', ' ', $clean);
+        return Str::limit($clean, 160);
+    }
+
+    /**
+     * Generate Meta Keywords
+     */
+    public static function generateMetaKeywords($title, $categoryId = null)
+    {
+        $keywords = [];
+        
+        // Extract from title
+        $titleWords = preg_split('/\s+/', strip_tags($title), -1, PREG_SPLIT_NO_EMPTY);
+        $keywords = array_merge($keywords, $titleWords);
+        
+        // Add category
+        if ($categoryId) {
+            $category = Category::find($categoryId);
+            if ($category) {
+                $keywords[] = $category->display_name ?? $category->name;
+            }
+        }
+        
+        // Add default keywords
+        $keywords[] = 'हिंदी खबरें';
+        $keywords[] = 'ताज़ा खबरें';
+        $keywords[] = self::getSiteName();
+        
+        // Remove duplicates and limit
+        $keywords = array_unique($keywords);
+        $keywords = array_slice($keywords, 0, 10);
+        
+        return implode(', ', $keywords);
+    }
+
+    /**
+     * Get site name
+     */
+    protected static function getSiteName()
+    {
+        try {
+            return \App\Models\SiteSetting::get('site_name', 'द पब्लिक एक्सप्रेस');
+        } catch (\Exception $e) {
+            return 'द पब्लिक एक्सप्रेस';
+        }
+    }
+
+    // ============================================================
+    // ✅ ACCESSORS - SEO Meta
+    // ============================================================
+
+    public function getMetaTitleAttribute($value)
+    {
+        if (!empty($value)) {
+            return $value;
+        }
+        return self::generateMetaTitle($this->title);
+    }
+
+    public function getMetaDescriptionAttribute($value)
+    {
+        if (!empty($value)) {
+            return $value;
+        }
+        if (!empty($this->summary)) {
+            return self::generateMetaDescription($this->summary);
+        }
+        if (!empty($this->body)) {
+            return self::generateMetaDescription($this->body);
+        }
+        return self::generateMetaDescription($this->title);
+    }
+
+    public function getMetaKeywordsAttribute($value)
+    {
+        if (!empty($value)) {
+            return $value;
+        }
+        return self::generateMetaKeywords($this->title, $this->category_id);
+    }
+
+    public function getAltTextAttribute($value)
+    {
+        if (!empty($value)) {
+            return $value;
+        }
+        if (!empty($this->featured_image)) {
+            return self::generateAltText($this->title);
+        }
+        return null;
+    }
+
+    public function getCanonicalUrlAttribute($value)
+    {
+        if (!empty($value)) {
+            return $value;
+        }
+        try {
+            return route('news.show', $this->slug);
+        } catch (\Exception $e) {
+            return url('/news/' . $this->slug);
+        }
+    }
+
+    // ============================================================
+    // ✅ RELATIONSHIPS
+    // ============================================================
+    public function category()
+    {
+        return $this->belongsTo(Category::class, 'category_id');
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    public function category()
+    public function approver()
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function state()
@@ -95,19 +320,9 @@ class News extends Model
         return $this->belongsTo(Block::class);
     }
 
-    public function approver()
-    {
-        return $this->belongsTo(User::class, 'approved_by');
-    }
-
-    // ===== HYPERLOCAL RELATIONSHIPS =====
-    public function hyperlocalNotifications()
-    {
-        return $this->hasMany(HyperlocalNotification::class);
-    }
-
-    // ===== SCOPES =====
-    
+    // ============================================================
+    // ✅ SCOPES
+    // ============================================================
     public function scopePublished($query)
     {
         return $query->where('status', 'published');
@@ -128,328 +343,152 @@ class News extends Model
         return $query->where('status', 'draft');
     }
 
-    public function scopeBreaking($query)
+    public function scopeWithLocation($query, $stateId = null, $districtId = null, $tehsilId = null, $blockId = null)
     {
-        return $query->where('is_breaking', true);
+        if ($blockId) {
+            return $query->where('block_id', $blockId);
+        }
+        if ($tehsilId) {
+            return $query->where('tehsil_id', $tehsilId);
+        }
+        if ($districtId) {
+            return $query->where('district_id', $districtId);
+        }
+        if ($stateId) {
+            return $query->where('state_id', $stateId);
+        }
+        return $query;
     }
 
-    public function scopeFeatured($query)
-    {
-        return $query->where('is_featured', true);
-    }
-
-    public function scopeNational($query)
-    {
-        return $query->where('is_national', true);
-    }
-
-    public function scopeState($query)
-    {
-        return $query->where('is_state', true);
-    }
-
-    // ===== HYPERLOCAL SCOPES =====
-    public function scopeHyperlocal($query)
-    {
-        return $query->where('is_hyperlocal', true)
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude');
-    }
-
-    public function scopeNearby($query, $lat, $lng, $radius = 5)
-    {
-        return $query->where('status', 'published')
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->selectRaw(
-                "*, ( 6371 * acos( cos( radians(?) ) * cos( radians( latitude ) ) * cos( radians( longitude ) - radians(?) ) + sin( radians(?) ) * sin( radians( latitude ) ) ) ) AS distance",
-                [$lat, $lng, $lat]
-            )
-            ->having('distance', '<=', $radius);
-    }
-
-    // ===== ACCESSORS =====
-    
-    public function getFormattedPublishedAtAttribute()
-    {
-        return $this->published_at ? $this->published_at->diffForHumans() : 'Just now';
-    }
-
-    public function getPublishedAtHumanAttribute()
-    {
-        return $this->published_at ? $this->published_at->format('M d, Y') : 'N/A';
-    }
-
+    // ============================================================
+    // ✅ ACCESSORS
+    // ============================================================
     public function getStatusLabelAttribute()
     {
         $labels = [
-            'draft' => '📝 ड्राफ्ट',
-            'pending' => '⏳ लंबित',
+            'pending' => '⏳ समीक्षा के लिए',
             'published' => '✅ प्रकाशित',
-            'rejected' => '❌ अस्वीकृत'
+            'rejected' => '❌ अस्वीकृत',
+            'draft' => '📝 ड्राफ्ट',
         ];
         return $labels[$this->status] ?? $this->status;
     }
 
-    public function getStatusBadgeColorAttribute()
+    public function getApprovalStatusLabelAttribute()
     {
-        $colors = [
-            'published' => 'success',
-            'pending' => 'warning',
-            'rejected' => 'danger',
-            'draft' => 'secondary',
+        $labels = [
+            'pending' => '⏳ लंबित',
+            'approved' => '✅ स्वीकृत',
+            'rejected' => '❌ अस्वीकृत',
         ];
-        return $colors[$this->status] ?? 'secondary';
+        return $labels[$this->approval_status] ?? $this->approval_status;
     }
 
-    public function getLocationLevelAttribute()
+    public function getApprovalLevelLabelAttribute()
     {
-        if ($this->block_id) return 'block';
-        if ($this->tehsil_id) return 'tehsil';
-        if ($this->district_id) return 'district';
-        if ($this->state_id) return 'state';
-        if ($this->is_national) return 'national';
-        return 'none';
+        $labels = [
+            'block' => 'ब्लॉक',
+            'tehsil' => 'तहसील',
+            'district' => 'जिला',
+            'state' => 'राज्य',
+            'admin' => 'एडमिन',
+        ];
+        return $labels[$this->approval_level] ?? $this->approval_level;
     }
 
-    public function getImageUrlAttribute()
+    // ============================================================
+    // ✅ LOCATION LABEL
+    // ============================================================
+    public function getLocationLabel()
     {
-        if (empty($this->featured_image)) {
-            return asset('images/default-news.jpg');
+        $parts = [];
+
+        if ($this->state_id) {
+            $state = State::find($this->state_id);
+            if ($state) $parts[] = $state->name;
+        }
+        if ($this->district_id) {
+            $district = District::find($this->district_id);
+            if ($district) $parts[] = $district->name;
+        }
+        if ($this->tehsil_id) {
+            $tehsil = Tehsil::find($this->tehsil_id);
+            if ($tehsil) $parts[] = $tehsil->name;
+        }
+        if ($this->block_id) {
+            $block = Block::find($this->block_id);
+            if ($block) $parts[] = $block->name;
         }
 
-        if (filter_var($this->featured_image, FILTER_VALIDATE_URL)) {
-            return $this->featured_image;
+        if (!empty($parts)) {
+            return implode(', ', $parts);
         }
 
-        if (strpos($this->featured_image, 'storage/') === 0) {
-            return asset($this->featured_image);
+        if ($this->user) {
+            return $this->user->getLocationString();
         }
 
-        if (strpos($this->featured_image, 'news/2026/') !== false) {
-            return asset('storage/' . $this->featured_image);
-        }
-
-        if (strpos($this->featured_image, 'news/') === 0) {
-            return asset('storage/' . $this->featured_image);
-        }
-
-        return asset('storage/news/' . $this->featured_image);
+        return 'N/A';
     }
 
-    public function getExcerptAttribute()
+    // ============================================================
+    // ✅ SEO DATA FOR JSON-LD
+    // ============================================================
+    public function getSeoData()
     {
-        if ($this->summary) {
-            return $this->summary;
-        }
-        return $this->body ? strip_tags(substr($this->body, 0, 150)) . '...' : '';
+        return [
+            'title' => $this->meta_title,
+            'description' => $this->meta_description,
+            'keywords' => $this->meta_keywords,
+            'canonical' => $this->canonical_url,
+            'image' => $this->featured_image ? asset($this->featured_image) : asset('images/logo.png'),
+            'alt' => $this->alt_text,
+            'published_time' => $this->published_at ?? $this->created_at,
+            'modified_time' => $this->updated_at,
+            'author' => $this->user->name ?? 'द पब्लिक एक्सप्रेस',
+            'category' => $this->category->display_name ?? $this->category->name ?? null,
+        ];
     }
 
-    public function getReadingTimeAttribute()
+    // ============================================================
+    // ✅ INCREMENT VIEWS
+    // ============================================================
+    public function incrementViews()
     {
-        $words = str_word_count(strip_tags($this->body ?? ''));
-        $minutes = ceil($words / 200);
-        return $minutes . ' min read';
-    }
-
-    // ===== HYPERLOCAL ACCESSORS =====
-    public function getDistanceFrom($lat, $lng)
-    {
-        if (!$this->latitude || !$this->longitude) {
-            return null;
-        }
-        return $this->calculateDistance($lat, $lng, $this->latitude, $this->longitude);
-    }
-
-    public function getDistanceText($lat, $lng)
-    {
-        $distance = $this->getDistanceFrom($lat, $lng);
-        if ($distance === null) return 'Unknown';
-        if ($distance < 1) {
-            return round($distance * 1000) . ' मीटर';
-        }
-        return number_format($distance, 1) . ' किमी';
-    }
-
-    // ===== MUTATORS =====
-    
-    public function setSlugAttribute($value)
-    {
-        $this->attributes['slug'] = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $value)));
-    }
-
-    // ===== HYPERLOCAL METHODS =====
-    
-    /**
-     * Calculate distance between two coordinates (in kilometers)
-     */
-    public function calculateDistance($lat1, $lng1, $lat2, $lng2)
-    {
-        $theta = $lng1 - $lng2;
-        $dist = sin(deg2rad($lat1)) * sin(deg2rad($lat2)) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * cos(deg2rad($theta));
-        $dist = acos($dist);
-        $dist = rad2deg($dist);
-        $miles = $dist * 60 * 1.1515;
-        return $miles * 1.609344; // Kilometers
-    }
-
-    /**
-     * Check if news is within radius of a location
-     */
-    public function isNearby($lat, $lng, $radius = 5)
-    {
-        if (!$this->latitude || !$this->longitude) {
-            return false;
-        }
-        
-        $distance = $this->calculateDistance($lat, $lng, $this->latitude, $this->longitude);
-        return $distance <= $radius;
-    }
-
-    /**
-     * Get nearby users for this news
-     */
-    public function getNearbyUsers($radius = 5)
-    {
-        if (!$this->latitude || !$this->longitude) {
-            return collect();
-        }
-        
-        return User::whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->selectRaw(
-                "*, ( 6371 * acos( cos( radians(?) ) * cos( radians( latitude ) ) * cos( radians( longitude ) - radians(?) ) + sin( radians(?) ) * sin( radians( latitude ) ) ) ) AS distance",
-                [$this->latitude, $this->longitude, $this->latitude]
-            )
-            ->having('distance', '<=', $radius)
-            ->get();
-    }
-
-    /**
-     * Send hyperlocal notification to nearby users
-     */
-    public function sendHyperlocalNotifications($radius = 5)
-    {
-        if (!$this->latitude || !$this->longitude) {
-            return 0;
-        }
-
-        $nearbyUsers = $this->getNearbyUsers($radius);
-        $count = 0;
-
-        foreach ($nearbyUsers as $user) {
-            // Check if already notified
-            $exists = HyperlocalNotification::where('news_id', $this->id)
-                ->where('user_id', $user->id)
-                ->exists();
-
-            if (!$exists) {
-                HyperlocalNotification::create([
-                    'news_id' => $this->id,
-                    'user_id' => $user->id,
-                    'distance' => $user->distance ?? null,
-                    'is_read' => false,
-                    'sent_at' => now(),
-                ]);
-                $count++;
-            }
-        }
-
-        // Mark news as hyperlocal
-        $this->is_hyperlocal = true;
-        $this->save();
-
-        return $count;
-    }
-
-    // ===== APPROVAL METHODS =====
-    
-    public function canBeApprovedBy(User $user)
-    {
-        if ($user->isSuperAdmin() || $user->role === 'admin') {
-            return true;
-        }
-
-        if (!$user->can_approve) {
-            return false;
-        }
-
-        // Block level
-        if ($user->approval_level === 'block' && $this->block_id == $user->assigned_block_id) {
-            return true;
-        }
-
-        // Tehsil level
-        if ($user->approval_level === 'tehsil' && $this->tehsil_id == $user->assigned_tehsil_id) {
-            return true;
-        }
-
-        // District level
-        if ($user->approval_level === 'district' && $this->district_id == $user->assigned_district_id) {
-            return true;
-        }
-
-        // State level
-        if ($user->approval_level === 'state' && $this->state_id == $user->assigned_state_id) {
-            return true;
-        }
-
-        return false;
-    }
-
-    public function approve($user)
-    {
-        $this->status = 'published';
-        $this->published_at = now();
-        $this->approved_by = $user->id;
-        $this->approved_by_level = $user->approval_level;
-        $this->save();
-
-        // Add points
-        $this->user->increment('points', 10);
-        
-        ReporterPoint::create([
-            'user_id' => $this->user_id,
-            'news_id' => $this->id,
-            'points' => 10,
-            'reason' => 'News published: ' . $this->title,
-            'action' => 'news_published'
-        ]);
-
-        // Notification
-        Notification::create([
-            'user_id' => $this->user_id,
-            'news_id' => $this->id,
-            'type' => 'news_approved',
-            'title' => '✅ खबर स्वीकृत!',
-            'message' => 'आपकी खबर "' . $this->title . '" स्वीकृत कर ली गई है। आपको 10 पॉइंट्स मिले हैं!',
-            'is_read' => false,
-        ]);
-
-        // Send hyperlocal notifications if location exists
-        if ($this->latitude && $this->longitude) {
-            $this->sendHyperlocalNotifications($this->location_radius ?? 5);
-        }
-
+        $this->increment('views');
         return $this;
     }
 
-    public function reject($user, $reason)
+    // ============================================================
+    // ✅ GET RELATED NEWS
+    // ============================================================
+    public function getRelatedNews($limit = 5)
     {
-        $this->status = 'rejected';
-        $this->rejection_reason = $reason;
-        $this->approved_by = $user->id;
-        $this->save();
-
-        Notification::create([
-            'user_id' => $this->user_id,
-            'news_id' => $this->id,
-            'type' => 'news_rejected',
-            'title' => '❌ खबर अस्वीकृत!',
-            'message' => 'आपकी खबर "' . $this->title . '" अस्वीकृत कर दी गई है।' . "\n\nकारण: " . $reason,
-            'is_read' => false,
-        ]);
-
-        return $this;
+        $query = self::published()
+            ->where('id', '!=', $this->id)
+            ->where('category_id', $this->category_id)
+            ->latest('published_at');
+        
+        // Try to get from same location
+        $locationQuery = clone $query;
+        if ($this->block_id) {
+            $locationQuery->where('block_id', $this->block_id);
+        } elseif ($this->tehsil_id) {
+            $locationQuery->where('tehsil_id', $this->tehsil_id);
+        } elseif ($this->district_id) {
+            $locationQuery->where('district_id', $this->district_id);
+        } elseif ($this->state_id) {
+            $locationQuery->where('state_id', $this->state_id);
+        }
+        
+        $locationNews = $locationQuery->limit($limit)->get();
+        
+        if ($locationNews->count() >= $limit) {
+            return $locationNews;
+        }
+        
+        // If not enough, get from same category
+        $categoryNews = $query->limit($limit)->get();
+        return $categoryNews;
     }
 }

@@ -27,7 +27,6 @@ class LocationController extends Controller
             });
         }
         
-        // ✅ FIXED: 'name_hindi' → 'name_hi'
         $states = $query->withCount('districts')
             ->orderBy('name_hi', 'asc')
             ->paginate(20);
@@ -43,9 +42,12 @@ class LocationController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        // ✅ Auto‑fill Hindi name if not provided
+        $nameHi = $request->name_hi ?? $request->name;
+
         State::create([
             'name' => $request->name,
-            'name_hi' => $request->name_hi,
+            'name_hi' => $nameHi,
             'slug' => Str::slug($request->name),
             'is_active' => $request->is_active ?? true,
         ]);
@@ -62,9 +64,12 @@ class LocationController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        // Keep existing name_hi if not provided, else use new, else fallback to name
+        $nameHi = $request->name_hi ?? $state->name_hi ?? $request->name;
+
         $state->update([
             'name' => $request->name,
-            'name_hi' => $request->name_hi,
+            'name_hi' => $nameHi,
             'slug' => Str::slug($request->name),
             'is_active' => $request->is_active ?? $state->is_active,
         ]);
@@ -109,7 +114,6 @@ class LocationController extends Controller
             });
         }
         
-        // ✅ FIXED: 'name_hindi' → 'name_hi'
         $districts = $query->withCount('tehsils')
             ->orderBy('name_hi', 'asc')
             ->paginate(20);
@@ -128,9 +132,11 @@ class LocationController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        $nameHi = $request->name_hi ?? $request->name;
+
         District::create([
             'name' => $request->name,
-            'name_hi' => $request->name_hi,
+            'name_hi' => $nameHi,
             'state_id' => $request->state_id,
             'slug' => Str::slug($request->name),
             'is_active' => $request->is_active ?? true,
@@ -149,9 +155,11 @@ class LocationController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        $nameHi = $request->name_hi ?? $district->name_hi ?? $request->name;
+
         $district->update([
             'name' => $request->name,
-            'name_hi' => $request->name_hi,
+            'name_hi' => $nameHi,
             'state_id' => $request->state_id,
             'slug' => Str::slug($request->name),
             'is_active' => $request->is_active ?? $district->is_active,
@@ -197,7 +205,6 @@ class LocationController extends Controller
             });
         }
         
-        // ✅ FIXED: 'name_hindi' → 'name_hi'
         $tehsils = $query->withCount('blocks')
             ->orderBy('name_hi', 'asc')
             ->paginate(20);
@@ -216,9 +223,11 @@ class LocationController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        $nameHi = $request->name_hi ?? $request->name;
+
         Tehsil::create([
             'name' => $request->name,
-            'name_hi' => $request->name_hi,
+            'name_hi' => $nameHi,
             'district_id' => $request->district_id,
             'slug' => Str::slug($request->name),
             'is_active' => $request->is_active ?? true,
@@ -237,9 +246,11 @@ class LocationController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        $nameHi = $request->name_hi ?? $tehsil->name_hi ?? $request->name;
+
         $tehsil->update([
             'name' => $request->name,
-            'name_hi' => $request->name_hi,
+            'name_hi' => $nameHi,
             'district_id' => $request->district_id,
             'slug' => Str::slug($request->name),
             'is_active' => $request->is_active ?? $tehsil->is_active,
@@ -285,7 +296,6 @@ class LocationController extends Controller
             });
         }
         
-        // ✅ FIXED: 'name_hindi' → 'name_hi'
         $blocks = $query->orderBy('name_hi', 'asc')->paginate(20);
         
         $tehsils = Tehsil::where('is_active', true)->orderBy('name')->get();
@@ -302,9 +312,11 @@ class LocationController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        $nameHi = $request->name_hi ?? $request->name;
+
         Block::create([
             'name' => $request->name,
-            'name_hi' => $request->name_hi,
+            'name_hi' => $nameHi,
             'tehsil_id' => $request->tehsil_id,
             'slug' => Str::slug($request->name),
             'is_active' => $request->is_active ?? true,
@@ -323,9 +335,11 @@ class LocationController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        $nameHi = $request->name_hi ?? $block->name_hi ?? $request->name;
+
         $block->update([
             'name' => $request->name,
-            'name_hi' => $request->name_hi,
+            'name_hi' => $nameHi,
             'tehsil_id' => $request->tehsil_id,
             'slug' => Str::slug($request->name),
             'is_active' => $request->is_active ?? $block->is_active,

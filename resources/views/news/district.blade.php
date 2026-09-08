@@ -1,36 +1,40 @@
 @extends('layouts.app')
 
-@section('title', ($district->name ?? 'जिला') . ' - द पब्लिक एक्सप्रेस')
+@section('title', $district->display_name . ' - द पब्लिक एक्सप्रेस')
 
 @section('content')
-<div class="container my-4">
-    <h3 class="border-start border-danger border-4 ps-3 mb-4 text-dark font-weight-bold">
-        जिला: {{ $district->name ?? 'स्थानीय ख़बरें' }}
-    </h3>
+    <div class="mb-6">
+        <h1 class="text-2xl md:text-3xl font-black text-slate-950">📍 {{ $district->display_name }} की ताजा खबरें</h1>
+        <p class="text-sm text-slate-500 mt-1">जिले की सभी महत्वपूर्ण खबरें यहाँ पढ़ें</p>
+    </div>
 
-    <div class="row">
-        @if(isset($news) && $news->count() > 0)
-            @foreach($news as $item)
-            <div class="col-md-4 mb-4">
-                <div class="card h-100 shadow-sm border-0 rounded-3 overflow-hidden">
-                    @if($item->image)
-                        <img src="{{ asset('storage/' . $item->image) }}" class="card-img-top" alt="{{ $item->title }}" style="height: 200px; object-fit: cover;">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        @forelse($news as $item)
+            <div class="bg-white rounded-lg shadow-md overflow-hidden border border-slate-200 hover:shadow-lg transition">
+                <a href="{{ route('news.show', $item->slug) }}">
+                    @if($item->featured_image)
+                        <img src="{{ asset($item->featured_image) }}" 
+                             alt="{{ $item->alt_text ?? $item->title }}" 
+                             class="w-full h-48 object-cover"
+                             loading="lazy"
+                             onerror="this.src='https://placehold.co/600x400/c62828/white?text=News'">
                     @else
-                        <img src="https://via.placeholder.com/400x200" class="card-img-top" alt="Default Image">
+                        <div class="w-full h-48 bg-slate-200 flex items-center justify-center text-slate-500 text-sm">📸</div>
                     @endif
-                    <div class="card-body">
-                        <h5 class="card-title text-dark font-weight-bold" style="font-size: 1.1rem;">{{ \Illuminate\Support\Str::limit($item->title, 60) }}</h5>
-                        <p class="card-text text-muted small">{{ \Illuminate\Support\Str::limit(strip_tags($item->content), 100) }}</p>
-                        <a href="{{ route('news.show', $item->slug ?? $item->id) }}" class="btn btn-sm btn-danger rounded-pill px-3">पूरी ख़बर पढ़ें</a>
-                    </div>
+                </a>
+                <div class="p-4">
+                    <h2 class="font-bold text-base text-slate-900 line-clamp-2">
+                        <a href="{{ route('news.show', $item->slug) }}" class="hover:text-brand transition">{{ $item->title }}</a>
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-1">{{ \Carbon\Carbon::parse($item->created_at)->format('d M Y') }}</p>
                 </div>
             </div>
-            @endforeach
-        @else
-            <div class="col-md-12 text-center py-5">
-                <h5 class="text-muted">इस जिले में अभी कोई ख़बर उपलब्ध नहीं है।</h5>
-            </div>
-        @endif
+        @empty
+            <div class="col-span-full text-center py-10 text-slate-500">कोई खबर नहीं मिली।</div>
+        @endforelse
     </div>
-</div>
+
+    <div class="mt-6">
+        {{ $news->links() }}
+    </div>
 @endsection

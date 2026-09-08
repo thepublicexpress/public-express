@@ -2,40 +2,28 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category; // ✅ NewsCategory → Category
 use App\Models\News;
-use App\Models\NewsCategory;
-use App\Models\State;
 use Illuminate\Http\Request;
 
 class CategoryController extends Controller
 {
     public function show($slug)
     {
-        // Get category
-        $category = NewsCategory::where('slug', $slug)
-            ->where('is_active', true)
-            ->firstOrFail();
+        $category = Category::where('slug', $slug)->where('is_active', 1)->firstOrFail();
 
-        // Get news for this category
         $news = News::where('category_id', $category->id)
             ->where('status', 'published')
-            ->latest('published_at')
+            ->orderBy('published_at', 'desc')
             ->paginate(12);
 
-        // ===== GET ALL CATEGORIES FOR MENU =====
-        $categories = NewsCategory::where('is_active', true)
-                                  ->whereIn('slug', ['national', 'politics', 'education', 'sports', 'entertainment'])
-                                  ->orderBy('sort_order')
-                                  ->get();
+        $trendingNews = News::where('status', 'published')
+            ->orderBy('views', 'desc')
+            ->limit(10)
+            ->get();
 
-        // ===== GET STATES FOR MENU =====
-        $states = State::where('is_active', true)
-                       ->with(['districts' => function($query) {
-                           $query->where('is_active', true);
-                       }])
-                       ->orderBy('name')
-                       ->get();
+        $categories = Category::where('is_active', 1)->orderBy('order')->get();
 
-        return view('category.show', compact('category', 'news', 'categories', 'states'));
+        return view('category.show', compact('category', 'news', 'trendingNews', 'categories'));
     }
 }

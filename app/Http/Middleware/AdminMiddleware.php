@@ -1,38 +1,31 @@
 <?php
-// app/Http/Middleware/AdminMiddleware.php
 
 namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class AdminMiddleware
 {
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     */
     public function handle(Request $request, Closure $next)
     {
-        if (!auth()->check()) {
-            return redirect()->route('admin.login')
-                ->with('error', 'Please login to access admin panel.');
+        if (!Auth::check()) {
+            return redirect()->route('login');
         }
 
-        $user = auth()->user();
+        // ✅ सभी Admin रोल्स को अनुमति दें
+        $allowedRoles = ['admin', 'super_admin', 'state_admin', 'district_admin', 'tehsil_admin'];
         
-        if (!in_array($user->role, ['admin', 'super_admin', 'state_admin', 'district_admin', 'tehsil_admin', 'block_admin'])) {
-            auth()->logout();
-            return redirect()->route('admin.login')
-                ->with('error', 'Unauthorized access. Admin privileges required.');
-        }
-
-        if (!$user->is_active) {
-            auth()->logout();
-            return redirect()->route('admin.login')
-                ->with('error', 'Your account is inactive. Please contact admin.');
-        }
-
-        if (!$user->is_approved) {
-            auth()->logout();
-            return redirect()->route('admin.login')
-                ->with('error', 'Your account is not approved yet.');
+        if (!in_array(Auth::user()->role, $allowedRoles)) {
+            abort(403, 'Unauthorized access. You must be an admin to access this page.');
         }
 
         return $next($request);

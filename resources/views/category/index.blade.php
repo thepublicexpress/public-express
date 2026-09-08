@@ -2,88 +2,83 @@
 
 @section('title', 'सभी कैटेगरी - द पब्लिक एक्सप्रेस')
 
-@section('content')
-<div class="container my-2">
-    <nav aria-label="breadcrumb" class="mb-4 d-none d-md-block">
-        <ol class="breadcrumb bg-white p-3 rounded shadow-sm" style="font-weight: 700; font-size: 14px; border-left: 4px solid #b91c1c;">
-            <li class="breadcrumb-item"><a href="{{ url('/') }}" class="text-decoration-none text-dark"><i class="fas fa-home me-1"></i> होम</a></li>
-            <li class="breadcrumb-item active text-danger" aria-current="page">सभी कैटेगरी</li>
-        </ol>
-    </nav>
+@section('meta_tags')
+    <meta name="description" content="द पब्लिक एक्सप्रेस की सभी कैटेगरी - राजनीति, अपराध, शिक्षा, खेल, मनोरंजन">
+    <meta property="og:title" content="सभी कैटेगरी - द पब्लिक एक्सप्रेस">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ url()->current() }}">
+@endsection
 
-    <div class="d-flex align-items-center mb-4 pb-2 border-bottom border-2 border-danger">
-        <h3 class="text-dark m-0" style="font-family: 'Noto Sans Devanagari', sans-serif; font-weight: 800;">
-            <span class="bg-brand text-white px-3 py-1 rounded me-2" style="background-color: #b91c1c;"><i class="fas fa-folder"></i></span>
-            समाचार कैटेगरी
-        </h3>
+@section('content')
+
+    <!-- ============================================================ -->
+    <!--  CLEAN HEADER (NO BREADCRUMB)                                -->
+    <!-- ============================================================ -->
+    <div class="relative mb-8 rounded-2xl overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 shadow-xl border-b-4 border-brand">
+        <div class="absolute inset-0 opacity-5">
+            <div class="absolute top-0 right-0 w-64 h-64 bg-brand rounded-full blur-3xl"></div>
+            <div class="absolute bottom-0 left-0 w-48 h-48 bg-blue-500 rounded-full blur-3xl"></div>
+        </div>
+        <div class="relative z-10 px-6 md:px-8 py-6 md:py-8">
+            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                <div>
+                    <h1 class="text-3xl md:text-5xl font-black text-white tracking-tight flex items-center gap-3">
+                        <span class="text-4xl md:text-6xl">📂</span>
+                        <span class="text-brand-light drop-shadow-lg">सभी कैटेगरी</span>
+                    </h1>
+                    <p class="text-slate-400 text-sm font-semibold mt-1 flex items-center gap-2">
+                        <i class="fas fa-folder-open text-brand"></i>
+                        हर कस्बे, गाँव और सिटी की खबरें
+                    </p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="bg-brand/20 backdrop-blur-sm text-brand-light px-4 py-2 rounded-lg font-bold border border-brand/30 text-sm">
+                        <i class="fas fa-file-alt mr-2"></i>{{ $categories->count() ?? 0 }} कैटेगरी
+                    </span>
+                </div>
+            </div>
+        </div>
     </div>
 
-    @php
-        $finalNews = isset($newsList) && $newsList->count() > 0 ? $newsList : (isset($posts) && $posts->count() > 0 ? $posts : null);
-    @endphp
-
-    <div class="row g-4">
-        @if($finalNews && $finalNews->count() > 0)
-            @foreach($finalNews as $item)
-            <div class="col-12 col-md-6 col-lg-4">
-                <div class="card h-100 border-0 shadow-sm rounded-3 overflow-hidden bg-white hover-shadow transition-all">
-                    <div style="height: 220px; overflow: hidden; background-color: #f8fafc;">
-                        @if(isset($item->featured_image))
-                            <img src="{{ asset('storage/' . $item->featured_image) }}" class="card-img-top h-100 w-100 object-fit-cover" alt="{{ $item->title }}">
-                        @elseif(isset($item->image))
-                            <img src="{{ asset('storage/' . $item->image) }}" class="card-img-top h-100 w-100 object-fit-cover" alt="{{ $item->title }}">
-                        @else
-                            <img src="{{ asset('images/logo.png') }}" class="card-img-top p-4 h-100 w-100 object-fit-contain" alt="द पब्लिक एक्सप्रेस">
-                        @endif
-                    </div>
-
-                    <div class="card-body d-flex flex-column justify-content-between p-3">
+    <!-- ============================================================ -->
+    <!--  CATEGORIES GRID                                             -->
+    <!-- ============================================================ -->
+    @if(isset($categories) && $categories->count() > 0)
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            @foreach($categories as $cat)
+                <a href="{{ route('category.show', $cat->slug) }}" 
+                   class="group bg-white rounded-xl shadow-md overflow-hidden border border-slate-200 hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 block">
+                    <div class="p-6 flex items-center gap-4">
+                        <span class="text-4xl">{{ $cat->icon ?? '📰' }}</span>
                         <div>
-                            <div class="d-flex align-items-center gap-2 mb-2" style="font-size: 12px;">
-                                <span class="badge bg-danger" style="background-color: #b91c1c;">{{ $category->name ?? 'ताज़ा ख़बर' }}</span>
-                                <span class="text-muted">•</span>
-                                <span class="text-muted"><i class="far fa-clock"></i> {{ $item->created_at ? $item->created_at->diffForHumans() : '' }}</span>
-                            </div>
-                            
-                            <h5 class="card-title text-dark fw-bold" style="font-family: 'Noto Sans Devanagari', sans-serif; font-size: 1.05rem; line-height: 1.5; font-weight: 700;">
-                                <a href="{{ route('news.show', $item->slug ?? $item->id) }}" class="text-decoration-none text-dark hover-text-danger">
-                                    {{ \Illuminate\Support\Str::limit($item->title, 70) }}
-                                </a>
-                            </h5>
-                            
-                            <p class="card-text text-muted small mt-2">
-                                {{ \Illuminate\Support\Str::limit(strip_tags($item->summary ?? $item->body ?? $item->content), 110) }}
+                            <h3 class="font-extrabold text-lg text-slate-900 group-hover:text-brand transition-colors">
+                                {{ $cat->display_name ?? $cat->name }}
+                            </h3>
+                            <p class="text-sm text-slate-500 line-clamp-1">
+                                {{ $cat->description ?? $cat->display_name . ' की ताजा खबरें' }}
                             </p>
-                        </div>
-
-                        <div class="mt-3 pt-2 border-top border-light d-flex justify-content-between align-items-center text-muted" style="font-size: 12px;">
-                            <span><i class="far fa-user"></i> {{ $item->user->name ?? 'रिपोर्टर' }}</span>
-                            <a href="{{ route('news.show', $item->slug ?? $item->id) }}" class="btn btn-sm btn-danger px-3 fw-bold shadow-sm" style="background-color: #b91c1c; border: none; font-size: 12px;">
-                                पूरी ख़बर <i class="fas fa-arrow-right ms-1" style="font-size: 10px;"></i>
-                            </a>
+                            <span class="text-xs text-brand font-black mt-1 inline-block">
+                                <i class="fas fa-arrow-right"></i> खबरें देखें
+                            </span>
                         </div>
                     </div>
-                </div>
-            </div>
+                </a>
             @endforeach
+        </div>
 
-            <div class="col-12 d-flex justify-content-center mt-5">
-                {{ $finalNews->links() }}
-            </div>
-        @else
-            <div class="col-md-12 text-center py-5">
-                <div class="bg-white p-5 rounded-3 shadow-sm border border-light">
-                    <h4 class="text-secondary fw-bold">कोई ख़बर उपलब्ध नहीं है।</h4>
-                    <a href="{{ url('/') }}" class="btn btn-danger px-4 py-2 mt-2 fw-bold" style="background-color: #b91c1c; border: none;">होम पेज पर जाएं</a>
-                </div>
+        <!-- Pagination -->
+        @if(isset($categories) && method_exists($categories, 'links'))
+            <div class="mt-10 flex justify-center">
+                {{ $categories->links() }}
             </div>
         @endif
-    </div>
-</div>
+    @else
+        <div class="text-center py-16 bg-white rounded-xl shadow-sm border border-slate-200">
+            <span class="text-6xl block mb-4">📭</span>
+            <h3 class="text-xl font-black text-slate-600">कोई कैटेगरी नहीं मिली</h3>
+            <p class="text-sm text-slate-400 mt-1">अभी कोई कैटेगरी उपलब्ध नहीं है।</p>
+            <a href="/" class="inline-block mt-4 bg-brand text-white px-6 py-2 rounded-lg font-bold hover:bg-red-700 transition">← होम पेज पर जाएं</a>
+        </div>
+    @endif
 
-<style>
-    .transition-all { transition: all 0.3s ease; }
-    .hover-shadow:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.08) !important; }
-    .hover-text-danger:hover { color: #b91c1c !important; }
-</style>
 @endsection

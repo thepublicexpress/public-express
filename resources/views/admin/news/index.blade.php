@@ -1,272 +1,179 @@
 @extends('layouts.admin')
 
-@section('title', 'News Management')
+@section('title', 'खबर प्रबंधन')
 
 @section('content')
 <div class="container-fluid px-0">
-
-    <!-- Header -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h5 class="mb-0">📰 All News</h5>
-            <small class="text-muted">Manage all news articles</small>
+            <h4>📰 खबर प्रबंधन</h4>
+            <span class="badge bg-warning text-dark">⏳ लंबित: {{ $counts['pending'] ?? 0 }}</span>
+            <span class="badge bg-success">✅ प्रकाशित: {{ $counts['published'] ?? 0 }}</span>
+            <span class="badge bg-danger">❌ अस्वीकृत: {{ $counts['rejected'] ?? 0 }}</span>
         </div>
+        <a href="{{ route('admin.news.create') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> नई खबर लिखें
+        </a>
     </div>
 
     <!-- Filters -->
-    <div class="card mb-3">
-        <div class="card-body py-2">
-            <form method="GET" action="{{ route('admin.news.index') }}" class="row g-2 align-items-center">
-                <div class="col-12 col-sm-4">
-                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Search news..." value="{{ request('search') }}">
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <input type="text" name="search" class="form-control" placeholder="खोजें..." value="{{ request('search') }}">
                 </div>
-                <div class="col-6 col-sm-3">
-                    <select name="status" class="form-select form-select-sm">
-                        <option value="">All Status</option>
-                        <option value="published" {{ request('status') == 'published' ? 'selected' : '' }}>Published</option>
-                        <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
-                        <option value="rejected" {{ request('status') == 'rejected' ? 'selected' : '' }}>Rejected</option>
-                        <option value="draft" {{ request('status') == 'draft' ? 'selected' : '' }}>Draft</option>
+                <div class="col-md-3">
+                    <select name="status" class="form-select">
+                        <option value="">सभी स्थितियाँ</option>
+                        <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>⏳ लंबित</option>
+                        <option value="published" {{ request('status') == 'published' ? 'selected' : '' }}>✅ प्रकाशित</option>
+                        <option value="rejected" {{ request('status') == 'rejected' ? 'selected' : '' }}>❌ अस्वीकृत</option>
+                        <option value="draft" {{ request('status') == 'draft' ? 'selected' : '' }}>📝 ड्राफ्ट</option>
                     </select>
                 </div>
-                <div class="col-6 col-sm-3">
-                    <select name="category" class="form-select form-select-sm">
-                        <option value="">All Categories</option>
-                        @foreach($categories ?? [] as $cat)
-                            <option value="{{ $cat->id }}" {{ request('category') == $cat->id ? 'selected' : '' }}>
-                                {{ $cat->name }}
+                <div class="col-md-3">
+                    <select name="category" class="form-select">
+                        <option value="">सभी श्रेणियाँ</option>
+                        @foreach($categories as $category)
+                            <option value="{{ $category->id }}" {{ request('category') == $category->id ? 'selected' : '' }}>
+                                {{ $category->name }}
                             </option>
                         @endforeach
                     </select>
                 </div>
-                <div class="col-12 col-sm-2">
-                    <button type="submit" class="btn btn-primary btn-sm w-100">
-                        <i class="fas fa-search"></i> Filter
-                    </button>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">फ़िल्टर करें</button>
                 </div>
             </form>
-        </div>
-    </div>
-
-    <!-- Stats -->
-    <div class="row g-2 mb-3">
-        <div class="col-4 col-sm-2">
-            <div class="card bg-light text-center py-2">
-                <small class="text-muted">Total</small>
-                <strong>{{ $news->total() }}</strong>
-            </div>
-        </div>
-        <div class="col-4 col-sm-2">
-            <div class="card bg-success text-white text-center py-2">
-                <small>Published</small>
-                <strong>{{ $news->where('status', 'published')->count() }}</strong>
-            </div>
-        </div>
-        <div class="col-4 col-sm-2">
-            <div class="card bg-warning text-dark text-center py-2">
-                <small>Pending</small>
-                <strong>{{ $news->where('status', 'pending')->count() }}</strong>
-            </div>
-        </div>
-        <div class="col-6 col-sm-3">
-            <div class="card bg-danger text-white text-center py-2">
-                <small>Rejected</small>
-                <strong>{{ $news->where('status', 'rejected')->count() }}</strong>
-            </div>
-        </div>
-        <div class="col-6 col-sm-3">
-            <div class="card bg-secondary text-white text-center py-2">
-                <small>Draft</small>
-                <strong>{{ $news->where('status', 'draft')->count() }}</strong>
-            </div>
         </div>
     </div>
 
     <!-- News Table -->
     <div class="card">
         <div class="card-body p-0">
-            <div class="table-responsive d-none d-md-block">
-                <table class="table table-hover table-striped mb-0">
+            @if($news->count() > 0)
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
                     <thead>
                         <tr>
-                            <th style="width:50px;">ID</th>
-                            <th>Title</th>
-                            <th class="d-none d-lg-table-cell">Reporter</th>
-                            <th>Status</th>
-                            <th class="d-none d-sm-table-cell">Views</th>
-                            <th style="width:200px;">Actions</th>
+                            <th>शीर्षक</th>
+                            <th class="d-none d-md-table-cell">रिपोर्टर</th>
+                            <th>स्थिति</th>
+                            <th class="d-none d-sm-table-cell">व्यूज</th>
+                            <th class="d-none d-md-table-cell">तारीख</th>
+                            <th>कार्रवाई</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($news as $item)
+                        @foreach($news as $item)
                         <tr>
-                            <td>{{ $item->id }}</td>
                             <td>
-                                <a href="{{ route('admin.news.show', $item) }}" class="text-decoration-none">
-                                    {{ \Illuminate\Support\Str::limit($item->title, 40) }}
+                                <a href="{{ route('admin.news.show', $item->id) }}" class="text-decoration-none">
+                                    {{ Str::limit($item->title, 40) }}
                                 </a>
-                                @if($item->rejection_reason && $item->status == 'rejected')
-                                    <br><small class="text-danger">Reason: {{ Str::limit($item->rejection_reason, 30) }}</small>
+                                @if($item->is_breaking)
+                                    <span class="badge bg-danger ms-1">BREAKING</span>
+                                @endif
+                                @if($item->rejection_reason)
+                                    <br><small class="text-danger">कारण: {{ Str::limit($item->rejection_reason, 30) }}</small>
                                 @endif
                             </td>
-                            <td class="d-none d-lg-table-cell">{{ $item->user->name ?? 'N/A' }}</td>
+                            <td class="d-none d-md-table-cell">{{ $item->user->name ?? 'Unknown' }}</td>
                             <td>
                                 @if($item->status == 'published')
-                                    <span class="badge-published">✅ Published</span>
+                                    <span class="badge bg-success">✅ प्रकाशित</span>
                                 @elseif($item->status == 'pending')
-                                    <span class="badge-pending">⏳ Pending</span>
+                                    <span class="badge bg-warning text-dark">⏳ लंबित</span>
                                 @elseif($item->status == 'rejected')
-                                    <span class="badge-rejected">❌ Rejected</span>
+                                    <span class="badge bg-danger">❌ अस्वीकृत</span>
                                 @else
-                                    <span class="badge-draft">📝 Draft</span>
+                                    <span class="badge bg-secondary">📝 ड्राफ्ट</span>
                                 @endif
                             </td>
                             <td class="d-none d-sm-table-cell">{{ number_format($item->views ?? 0) }}</td>
+                            <td class="d-none d-md-table-cell">{{ $item->created_at->format('d-m-Y') }}</td>
                             <td>
-                                <div class="btn-group btn-group-sm" role="group">
-                                    <a href="{{ route('admin.news.show', $item) }}" class="btn btn-info" title="View">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ route('admin.news.show', $item->id) }}" class="btn btn-info">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    <a href="{{ route('admin.news.edit', $item) }}" class="btn btn-warning" title="Edit">
+                                    <a href="{{ route('admin.news.edit', $item->id) }}" class="btn btn-warning">
                                         <i class="fas fa-edit"></i>
                                     </a>
+                                    
                                     @if($item->status == 'pending')
-                                        <form method="POST" action="{{ route('admin.news.approve', $item) }}" style="display:inline">
+                                        <!-- Approve Button -->
+                                        <form action="{{ route('admin.news.approve', $item->id) }}" method="POST" style="display:inline;">
                                             @csrf
-                                            <button type="submit" class="btn btn-success" title="Approve" onclick="return confirm('Approve this news? Reporter will get 10 points.')">
+                                            <button type="submit" class="btn btn-success" onclick="return confirm('क्या आप इस खबर को स्वीकृत करना चाहते हैं?')">
                                                 <i class="fas fa-check"></i>
                                             </button>
                                         </form>
-                                    @endif
-                                    @if($item->status == 'pending' || $item->status == 'published')
-                                        <button type="button" class="btn btn-danger" title="Reject" data-bs-toggle="modal" 
-                                                data-bs-target="#rejectModal{{ $item->id }}">
+                                        
+                                        <!-- Reject Button with Modal -->
+                                        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $item->id }}">
                                             <i class="fas fa-times"></i>
                                         </button>
                                     @endif
-                                    <form method="POST" action="{{ route('admin.news.destroy', $item) }}" style="display:inline" 
-                                          onsubmit="return confirm('Delete this news?')">
-                                        @csrf @method('DELETE')
-                                        <button type="submit" class="btn btn-dark" title="Delete">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
+                                    
+                                    <!-- Delete Button -->
+                                    <button type="button" class="btn btn-danger" onclick="deleteNews({{ $item->id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
                                 </div>
+                                
+                                <!-- Reject Modal -->
+                                <div class="modal fade" id="rejectModal{{ $item->id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">खबर अस्वीकृत करें</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <form action="{{ route('admin.news.reject', $item->id) }}" method="POST">
+                                                @csrf
+                                                <div class="modal-body">
+                                                    <p>कृपया अस्वीकृति का कारण बताएं:</p>
+                                                    <textarea name="rejection_reason" class="form-control" rows="3" required></textarea>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">रद्द करें</button>
+                                                    <button type="submit" class="btn btn-danger">अस्वीकृत करें</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <form id="delete-form-{{ $item->id }}" action="{{ route('admin.news.destroy', $item->id) }}" method="POST" style="display:none;">
+                                    @csrf
+                                    @method('DELETE')
+                                </form>
                             </td>
                         </tr>
-
-                        <!-- ===== REJECT MODAL ===== -->
-                        <div class="modal fade" id="rejectModal{{ $item->id }}" tabindex="-1">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content">
-                                    <form method="POST" action="{{ route('admin.news.reject', $item) }}">
-                                        @csrf
-                                        <div class="modal-header bg-danger text-white">
-                                            <h5 class="modal-title"><i class="fas fa-times-circle"></i> Reject News</h5>
-                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <div class="mb-3">
-                                                <label class="fw-bold">News Title</label>
-                                                <p class="text-muted">{{ $item->title }}</p>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="fw-bold">Reporter</label>
-                                                <p class="text-muted">{{ $item->user->name ?? 'N/A' }}</p>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label for="rejection_reason" class="fw-bold">Rejection Reason <span class="text-danger">*</span></label>
-                                                <textarea name="rejection_reason" id="rejection_reason" class="form-control" rows="4" 
-                                                          placeholder="Reason for rejection (at least 10 characters)..." required></textarea>
-                                                <small class="text-muted">This reason will be sent as notification to the reporter.</small>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-danger">
-                                                <i class="fas fa-times"></i> Reject News
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                        @empty
-                        <tr>
-                            <td colspan="6" class="text-center text-muted py-4">
-                                <i class="fas fa-newspaper fa-2x d-block mb-2"></i>
-                                No news found
-                            </td>
-                        </tr>
-                        @endforelse
+                        @endforeach
                     </tbody>
                 </table>
             </div>
-
-            <!-- Mobile Card View -->
-            <div class="d-md-none">
-                @forelse($news as $item)
-                <div class="border-bottom p-3">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="mb-1">
-                                <a href="{{ route('admin.news.show', $item) }}" class="text-decoration-none">
-                                    {{ \Illuminate\Support\Str::limit($item->title, 50) }}
-                                </a>
-                            </h6>
-                            <div class="d-flex flex-wrap gap-2 small text-muted">
-                                <span>👤 {{ $item->user->name ?? 'N/A' }}</span>
-                                <span>👁️ {{ number_format($item->views ?? 0) }}</span>
-                            </div>
-                            @if($item->rejection_reason && $item->status == 'rejected')
-                                <div class="text-danger small mt-1">Reason: {{ Str::limit($item->rejection_reason, 50) }}</div>
-                            @endif
-                        </div>
-                        <div>
-                            @if($item->status == 'published')
-                                <span class="badge-published">✅</span>
-                            @elseif($item->status == 'pending')
-                                <span class="badge-pending">⏳</span>
-                            @elseif($item->status == 'rejected')
-                                <span class="badge-rejected">❌</span>
-                            @else
-                                <span class="badge-draft">📝</span>
-                            @endif
-                        </div>
-                    </div>
-                    <div class="d-flex flex-wrap gap-1 mt-2">
-                        <a href="{{ route('admin.news.show', $item) }}" class="btn btn-sm btn-info">View</a>
-                        <a href="{{ route('admin.news.edit', $item) }}" class="btn btn-sm btn-warning">Edit</a>
-                        @if($item->status == 'pending')
-                            <form method="POST" action="{{ route('admin.news.approve', $item) }}" style="display:inline">
-                                @csrf
-                                <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Approve?')">Approve</button>
-                            </form>
-                        @endif
-                        @if($item->status == 'pending' || $item->status == 'published')
-                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" 
-                                    data-bs-target="#rejectModal{{ $item->id }}">Reject</button>
-                        @endif
-                        <form method="POST" action="{{ route('admin.news.destroy', $item) }}" style="display:inline" 
-                              onsubmit="return confirm('Delete?')">
-                            @csrf @method('DELETE')
-                            <button type="submit" class="btn btn-sm btn-dark">Delete</button>
-                        </form>
-                    </div>
-                </div>
-                @empty
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-newspaper fa-2x d-block mb-2"></i>
-                    No news found
-                </div>
-                @endforelse
+            <div class="p-3">
+                {{ $news->links() }}
             </div>
+            @else
+            <div class="text-center py-5">
+                <i class="fas fa-newspaper fa-3x text-muted mb-3"></i>
+                <p>कोई खबर नहीं मिली</p>
+            </div>
+            @endif
         </div>
     </div>
-
-    <!-- Pagination -->
-    <div class="mt-3 d-flex justify-content-center">
-        {{ $news->appends(request()->query())->links() }}
-    </div>
 </div>
+
+<script>
+function deleteNews(id) {
+    if (confirm('क्या आप इस खबर को डिलीट करना चाहते हैं?')) {
+        document.getElementById('delete-form-' + id).submit();
+    }
+}
+</script>
 @endsection

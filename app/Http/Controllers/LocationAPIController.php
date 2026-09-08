@@ -12,53 +12,73 @@ use Illuminate\Http\Request;
 class LocationAPIController extends Controller
 {
     /**
-     * Get Districts by State ID
+     * Get Districts by State ID (only active)
      */
     public function getDistricts($state_id)
     {
         $districts = District::where('state_id', $state_id)
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'name_hi', 'slug']);
-        
+            ->get(['id', 'name', 'name_hi', 'slug', 'display_name']);
+
+        $districts->transform(function ($district) {
+            $district->display_name = $district->name_hi ?? $district->display_name ?? $district->name;
+            return $district;
+        });
+
         return response()->json($districts);
     }
 
     /**
-     * Get Tehsils by District ID
+     * Get Tehsils by District ID (only active)
      */
     public function getTehsils($district_id)
     {
         $tehsils = Tehsil::where('district_id', $district_id)
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'name_hi', 'slug']);
-        
+            ->get(['id', 'name', 'name_hi', 'slug', 'display_name']);
+
+        $tehsils->transform(function ($tehsil) {
+            $tehsil->display_name = $tehsil->name_hi ?? $tehsil->display_name ?? $tehsil->name;
+            return $tehsil;
+        });
+
         return response()->json($tehsils);
     }
 
     /**
-     * Get Blocks by Tehsil ID
+     * Get Blocks by Tehsil ID (only active)
      */
     public function getBlocks($tehsil_id)
     {
         $blocks = Block::where('tehsil_id', $tehsil_id)
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'name_hi', 'slug']);
-        
+            ->get(['id', 'name', 'name_hi', 'slug', 'display_name']);
+
+        $blocks->transform(function ($block) {
+            $block->display_name = $block->name_hi ?? $block->display_name ?? $block->name;
+            return $block;
+        });
+
         return response()->json($blocks);
     }
 
     /**
-     * Get States for dropdown
+     * Get States for dropdown (only active)
      */
     public function getStates()
     {
         $states = State::where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'name_hi', 'slug']);
-        
+            ->get(['id', 'name', 'name_hi', 'slug', 'display_name']);
+
+        $states->transform(function ($state) {
+            $state->display_name = $state->name_hi ?? $state->display_name ?? $state->name;
+            return $state;
+        });
+
         return response()->json($states);
     }
 

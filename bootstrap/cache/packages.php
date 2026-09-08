@@ -1,16 +1,13 @@
 <?php return array (
-  'laravel/pail' => 
+  'intervention/image' => 
   array (
-    'providers' => 
+    'aliases' => 
     array (
-      0 => 'Laravel\\Pail\\PailServiceProvider',
+      'Image' => 'Intervention\\Image\\Facades\\Image',
     ),
-  ),
-  'laravel/sail' => 
-  array (
     'providers' => 
     array (
-      0 => 'Laravel\\Sail\\SailServiceProvider',
+      0 => 'Intervention\\Image\\ImageServiceProvider',
     ),
   ),
   'laravel/sanctum' => 
@@ -32,13 +29,6 @@
     'providers' => 
     array (
       0 => 'Carbon\\Laravel\\ServiceProvider',
-    ),
-  ),
-  'nunomaduro/collision' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
     ),
   ),
   'nunomaduro/termwind' => 
