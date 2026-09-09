@@ -102,7 +102,9 @@
         @endforeach
     </div>
     <div class="mt-8 flex justify-center">
-        {{ $latestNews->links() }}
+        @if (method_exists($latestNews, 'links'))
+            {{ $latestNews->links() }}
+        @endif
     </div>
 </div>
 

@@ -428,6 +428,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/{ad}', [AdminAdController::class, 'destroy'])->name('destroy');
             Route::get('/{ad}/toggle', [AdminAdController::class, 'toggle'])->name('toggle');
             Route::get('/{ad}/toggle-status', [AdminAdController::class, 'toggleStatus'])->name('toggle-status');
+            Route::post('/{ad}/toggle-status', [AdminAdController::class, 'toggleStatus']);
         });
 
         // ============================================================

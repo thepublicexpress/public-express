@@ -65,6 +65,14 @@ class NewsController extends Controller
         }
     }
 
+    public function create()
+    {
+        $categories = Category::where('is_active', 1)->orderBy('order')->get();
+        $reporters = User::where('role', 'reporter')->orderBy('name')->get();
+
+        return view('admin.news.create', compact('categories', 'reporters'));
+    }
+
     public function show($id)
     {
         try {
