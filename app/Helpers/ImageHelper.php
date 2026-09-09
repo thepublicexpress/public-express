@@ -94,7 +94,14 @@ class ImageHelper
                 }
             }
 
-            throw new \RuntimeException('Unable to compress image below the configured size limit.');
+            // Some images cannot reach the target without becoming unusable.
+            // Keep the smallest generated version instead of failing the upload.
+            if (is_file($fullPath) && filesize($fullPath) > 0) {
+                Log::warning("⚠️ Image kept above size limit: " . round(filesize($fullPath) / 1024, 2) . ' KB');
+                return '/' . $folder . '/' . $imageName;
+            }
+
+            throw new \RuntimeException('Image could not be encoded.');
             
         } catch (\Exception $e) {
             Log::error('❌ Image optimization failed: ' . $e->getMessage());
