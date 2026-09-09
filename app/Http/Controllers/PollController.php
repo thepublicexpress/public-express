@@ -74,6 +74,8 @@ class PollController extends Controller
             $validated = $request->validate([
                 'poll_id' => 'required|exists:polls,id',
                 'seat_id' => 'required|exists:assembly_seats,id',
+                'respondent_name' => 'required|string|min:2|max:100',
+                'respondent_mobile' => 'required|digits:10',
                 'answers' => 'required|array',
             ]);
 
@@ -81,11 +83,21 @@ class PollController extends Controller
             $userId = auth()->id();
             $pollId = $validated['poll_id'];
             $seatId = $validated['seat_id'];
+            $respondentName = trim($validated['respondent_name']);
+            $respondentMobile = $validated['respondent_mobile'];
             $answers = $validated['answers'];
 
-            // Check duplicate vote for this seat and poll
+            // A respondent can vote only once in the whole poll, regardless of seat.
+            if (PollResponse::alreadyVotedInPoll($pollId, $ip, $respondentMobile, $userId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'इस मोबाइल नंबर या नेटवर्क से इस पोल में पहले ही राय दर्ज हो चुकी है।'
+                ], 422);
+            }
+
+            // Check duplicate vote for this seat and poll.
             foreach ($answers as $questionId => $selectedOption) {
-                if (PollResponse::alreadyVoted($pollId, $seatId, $questionId, $ip, $userId)) {
+                if (PollResponse::alreadyVoted($pollId, $seatId, $questionId, $ip, $respondentMobile, $userId)) {
                     return response()->json([
                         'success' => false,
                         'message' => 'आप पहले ही इस सीट के लिए वोट दे चुके हैं!'
@@ -100,6 +112,8 @@ class PollController extends Controller
                     'question_id' => $questionId,
                     'seat_id' => $seatId,
                     'user_id' => $userId,
+                    'respondent_name' => $respondentName,
+                    'respondent_mobile' => $respondentMobile,
                     'selected_option' => $selectedOption,
                     'ip_address' => $ip,
                     'user_agent' => $request->header('User-Agent'),

@@ -952,6 +952,13 @@
                     <h3>अपनी राय दें</h3>
                     <p class="selected-seat-info" id="selectedSeatInfo"></p>
                 </div>
+                <div class="poll-respondent-details">
+                    <label class="poll-field-label" for="pollRespondentName">नाम</label>
+                    <input id="pollRespondentName" class="poll-select" type="text" maxlength="100" placeholder="अपना नाम लिखें" autocomplete="name" required>
+                    <label class="poll-field-label" for="pollRespondentMobile">मोबाइल नंबर</label>
+                    <input id="pollRespondentMobile" class="poll-select" type="tel" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" placeholder="10 अंकों का मोबाइल नंबर" autocomplete="tel" required>
+                    <p class="poll-field-note">एक मोबाइल नंबर से इस Opinion Poll में केवल एक बार राय दर्ज की जा सकती है।</p>
+                </div>
                 <div id="questionsContainer" class="questions-container">
                     <!-- Questions will be loaded via AJAX -->
                 </div>
@@ -1500,8 +1507,19 @@
         btn.disabled = true;
         btn.textContent = '⏳ भेजा जा रहा है...';
 
+        const respondentName = document.getElementById('pollRespondentName')?.value.trim() || '';
+        const respondentMobile = document.getElementById('pollRespondentMobile')?.value.trim() || '';
+        if (respondentName.length < 2 || !/^\d{10}$/.test(respondentMobile)) {
+            alert('कृपया अपना नाम और 10 अंकों का सही मोबाइल नंबर भरें।');
+            btn.disabled = false;
+            btn.textContent = '📨 भेजें';
+            return;
+        }
+
         const data = {
             seat_id: selectedSeatId,
+            respondent_name: respondentName,
+            respondent_mobile: respondentMobile,
             answers: selectedAnswers,
             poll_id: pollQuestions[0]?.poll_id || 1
         };
