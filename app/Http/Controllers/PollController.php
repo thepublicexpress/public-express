@@ -7,7 +7,9 @@ use App\Models\AssemblySeat;
 use App\Models\PollQuestion;
 use App\Models\PollResponse;
 use App\Models\PollResult;
+use App\Models\PollRespondent;
 use Illuminate\Http\Request;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
 
 class PollController extends Controller
@@ -93,6 +95,27 @@ class PollController extends Controller
                     'success' => false,
                     'message' => 'इस मोबाइल नंबर या नेटवर्क से इस पोल में पहले ही राय दर्ज हो चुकी है।'
                 ], 422);
+            }
+
+            try {
+                PollRespondent::create([
+                    'poll_id' => $pollId,
+                    'seat_id' => $seatId,
+                    'user_id' => $userId,
+                    'respondent_name' => $respondentName,
+                    'respondent_mobile' => $respondentMobile,
+                    'ip_address' => $ip,
+                    'user_agent' => $request->header('User-Agent'),
+                ]);
+            } catch (QueryException $exception) {
+                if ((int) $exception->errorInfo[1] === 1062) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'इस IP से इस Opinion Poll में पहले ही राय दर्ज हो चुकी है।'
+                    ], 422);
+                }
+
+                throw $exception;
             }
 
             // Check duplicate vote for this seat and poll.

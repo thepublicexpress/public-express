@@ -7,6 +7,7 @@ use App\Models\Poll;
 use App\Models\PollQuestion;
 use App\Models\PollResponse;
 use App\Models\PollResult;
+use App\Models\PollRespondent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -24,9 +25,14 @@ class PollController extends Controller
             ->latest()
             ->get()
             ->groupBy('poll_id');
+        $seatSummaries = PollRespondent::with(['poll', 'seat'])
+            ->select('poll_id', 'seat_id', DB::raw('COUNT(*) as respondent_count'))
+            ->groupBy('poll_id', 'seat_id')
+            ->orderByDesc('respondent_count')
+            ->get();
 
         return view('admin.poll-results', compact(
-            'polls', 'activePoll', 'totalVotes', 'totalQuestions', 'activePolls', 'results'
+            'polls', 'activePoll', 'totalVotes', 'totalQuestions', 'activePolls', 'results', 'seatSummaries'
         ));
     }
 

@@ -38,6 +38,16 @@
         </tbody></table>
     </div></div>
 
+    <div class="card mb-4"><div class="card-header"><h5 class="mb-0">विधानसभा-wise रिपोर्ट</h5></div><div class="table-responsive">
+        <table class="table table-striped mb-0"><thead><tr><th>Poll</th><th>जिला</th><th>विधानसभा</th><th>Unique respondents</th></tr></thead><tbody>
+        @forelse($seatSummaries as $summary)
+            <tr><td>{{ $summary->poll->title ?? '-' }}</td><td>{{ $summary->seat->district ?? '-' }}</td><td>{{ $summary->seat->seat_name ?? '-' }}</td><td><strong>{{ $summary->respondent_count }}</strong></td></tr>
+        @empty
+            <tr><td colspan="4" class="text-center py-4">अभी कोई विधानसभा-wise response नहीं है।</td></tr>
+        @endforelse
+        </tbody></table>
+    </div></div>
+
     <div class="card"><div class="card-header"><h5 class="mb-0">वोट रिपोर्ट</h5></div><div class="table-responsive">
         <table class="table table-striped mb-0"><thead><tr><th>Poll</th><th>Seat</th><th>Question</th><th>Option</th><th>Votes</th><th>प्रतिशत</th></tr></thead><tbody>
         @forelse($results->flatten() as $result)
