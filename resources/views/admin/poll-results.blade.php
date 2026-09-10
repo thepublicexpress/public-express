@@ -36,7 +36,14 @@
         </form>
     </div></div>
 
-    <div class="card mb-4"><div class="card-header"><h5 class="mb-0">विधानसभा-wise ग्राफ</h5></div><div class="card-body"><canvas id="pollSeatChart" height="100"></canvas></div></div>
+    <div class="card mb-4"><div class="card-header"><h5 class="mb-0">ग्राफ</h5></div><div class="card-body">
+        <h6>विधानसभा-wise respondents</h6><canvas id="pollSeatChart" height="100"></canvas>
+        @forelse($voteChartData as $index => $voteChart)
+            <h6 class="mt-4">{{ $voteChart['title'] }}</h6><canvas id="pollVoteChart{{ $index }}" height="100"></canvas>
+        @empty
+            <p class="text-muted mb-0">इस filter में vote graph के लिए data नहीं है।</p>
+        @endforelse
+    </div></div>
 
     <div class="card mb-4"><div class="card-header"><h5 class="mb-0">पोल मैनेज करें</h5></div><div class="table-responsive">
         <table class="table table-hover mb-0"><thead><tr><th>Title</th><th>सवाल</th><th>Responses</th><th>Status</th><th>Actions</th></tr></thead><tbody>
@@ -63,10 +70,10 @@
         </tbody></table>
     </div></div>
 
-    <div class="card mb-4"><div class="card-header"><h5 class="mb-0">Respondent details ({{ $respondents->total() }})</h5></div><div class="table-responsive">
-        <table class="table table-hover mb-0"><thead><tr><th>नाम</th><th>मोबाइल</th><th>जिला</th><th>विधानसभा</th><th>Poll</th><th>Submitted</th></tr></thead><tbody>
+    <div class="card mb-4"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">Respondent details ({{ $respondents->total() }})</h5><div class="d-flex gap-3"><label><input type="checkbox" id="showRespondentName" checked> नाम दिखाएँ</label><label><input type="checkbox" id="showRespondentMobile" checked> मोबाइल दिखाएँ</label></div></div><div class="table-responsive">
+        <table class="table table-hover mb-0"><thead><tr><th class="respondent-name-column">नाम</th><th class="respondent-mobile-column">मोबाइल</th><th>जिला</th><th>विधानसभा</th><th>Poll</th><th>Submitted</th></tr></thead><tbody>
         @forelse($respondents as $respondent)
-            <tr><td>{{ $respondent->respondent_name ?? '-' }}</td><td>{{ $respondent->respondent_mobile ?? '-' }}</td><td>{{ $respondent->seat->district ?? '-' }}</td><td>{{ $respondent->seat->seat_name ?? '-' }}</td><td>{{ $respondent->poll->title ?? '-' }}</td><td>{{ optional($respondent->created_at)->format('d-m-Y H:i') }}</td></tr>
+            <tr><td class="respondent-name-column">{{ $respondent->respondent_name ?? '-' }}</td><td class="respondent-mobile-column">{{ $respondent->respondent_mobile ?? '-' }}</td><td>{{ $respondent->seat->district ?? '-' }}</td><td>{{ $respondent->seat->seat_name ?? '-' }}</td><td>{{ $respondent->poll->title ?? '-' }}</td><td>{{ optional($respondent->created_at)->format('d-m-Y H:i') }}</td></tr>
         @empty
             <tr><td colspan="6" class="text-center py-4">इस filter में कोई respondent नहीं मिला।</td></tr>
         @endforelse
@@ -105,5 +112,22 @@
         data: { labels: @json($chartData['labels']), datasets: [{ label: 'Unique respondents', data: @json($chartData['values']), backgroundColor: '#2563eb', borderRadius: 5 }] },
         options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } }
     });
+
+    @foreach($voteChartData as $index => $voteChart)
+        new Chart(document.getElementById('pollVoteChart{{ $index }}'), {
+            type: 'bar',
+            data: { labels: @json($voteChart['labels']), datasets: [{ label: 'Votes', data: @json($voteChart['values']), backgroundColor: ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#7c3aed', '#0891b2'], borderRadius: 5 }] },
+            options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } }
+        });
+    @endforeach
+
+    function toggleReportColumn(checkboxId, columnClass) {
+        const checkbox = document.getElementById(checkboxId);
+        const update = () => document.querySelectorAll('.' + columnClass).forEach((cell) => cell.style.display = checkbox.checked ? '' : 'none');
+        checkbox?.addEventListener('change', update);
+        update();
+    }
+    toggleReportColumn('showRespondentName', 'respondent-name-column');
+    toggleReportColumn('showRespondentMobile', 'respondent-mobile-column');
 </script>
 @endsection

@@ -33,6 +33,7 @@ class PollController extends Controller
         $results = PollResult::with(['poll', 'question', 'seat'])
             ->select('poll_results.*')
             ->when($request->filled('poll_id'), fn ($query) => $query->where('poll_id', $request->poll_id))
+            ->when($request->filled('district'), fn ($query) => $query->whereHas('seat', fn ($seat) => $seat->where('district', $request->district)))
             ->when($request->filled('seat_id'), fn ($query) => $query->where('seat_id', $request->seat_id))
             ->latest()
             ->get()
@@ -49,10 +50,22 @@ class PollController extends Controller
             'labels' => $seatSummaries->map(fn ($summary) => ($summary->seat->seat_name ?? 'Unknown') . ' (' . ($summary->seat->district ?? '-') . ')')->values(),
             'values' => $seatSummaries->pluck('respondent_count')->values(),
         ];
+        $voteChartData = $results->flatten()
+            ->groupBy('question_id')
+            ->map(function ($questionResults) {
+                $question = $questionResults->first()->question;
+
+                return [
+                    'title' => $question->question ?? 'Vote options',
+                    'labels' => $questionResults->pluck('option_label')->values(),
+                    'values' => $questionResults->pluck('votes_count')->values(),
+                ];
+            })
+            ->values();
 
         return view('admin.poll-results', compact(
             'polls', 'activePoll', 'totalVotes', 'totalQuestions', 'activePolls', 'results', 'seatSummaries',
-            'respondents', 'districts', 'seats', 'filters', 'chartData'
+            'respondents', 'districts', 'seats', 'filters', 'chartData', 'voteChartData'
         ));
     }
 
