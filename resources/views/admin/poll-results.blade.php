@@ -117,7 +117,21 @@
         new Chart(document.getElementById('pollVoteChart{{ $index }}'), {
             type: 'bar',
             data: { labels: @json($voteChart['labels']), datasets: [{ label: 'Votes', data: @json($voteChart['values']), backgroundColor: ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#7c3aed', '#0891b2'], borderRadius: 5 }] },
-            options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } }
+            options: {
+                responsive: true,
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                const percentages = @json($voteChart['percentages']);
+                                return ` ${context.raw} votes (${percentages[context.dataIndex]}%)`;
+                            }
+                        }
+                    }
+                }
+            }
         });
     @endforeach
 

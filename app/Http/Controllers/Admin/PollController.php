@@ -59,6 +59,13 @@ class PollController extends Controller
                     'title' => $question->question ?? 'Vote options',
                     'labels' => $questionResults->pluck('option_label')->values(),
                     'values' => $questionResults->pluck('votes_count')->values(),
+                    'percentages' => (function () use ($questionResults) {
+                        $total = max(1, $questionResults->sum('votes_count'));
+
+                        return $questionResults->pluck('votes_count')
+                            ->map(fn ($votes) => round(($votes / $total) * 100, 1))
+                            ->values();
+                    })(),
                 ];
             })
             ->values();
