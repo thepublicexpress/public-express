@@ -512,6 +512,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // ✅ Opinion Poll Management and Reports
         Route::get('/poll-results', [AdminPollController::class, 'index'])->name('poll.results');
+        Route::get('/poll-results/export', [AdminPollController::class, 'export'])->name('poll.export');
         Route::post('/polls', [AdminPollController::class, 'store'])->name('poll.store');
         Route::put('/polls/{poll}', [AdminPollController::class, 'update'])->name('poll.update');
         Route::post('/polls/{poll}/toggle', [AdminPollController::class, 'toggle'])->name('poll.toggle');

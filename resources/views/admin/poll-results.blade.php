@@ -23,6 +23,21 @@
         <div class="col-md-3"><div class="card bg-warning text-white"><div class="card-body"><h6>active poll</h6><h2>{{ $activePolls }}</h2></div></div></div>
     </div>
 
+    <div class="card mb-4"><div class="card-header d-flex justify-content-between align-items-center"><h5 class="mb-0">रिपोर्ट फ़िल्टर</h5><a class="btn btn-success btn-sm" href="{{ route('admin.poll.export', $filters) }}">CSV डाउनलोड</a></div><div class="card-body">
+        <form method="GET" action="{{ route('admin.poll.results') }}" class="row g-3">
+            <div class="col-md-3"><label class="form-label">Poll</label><select name="poll_id" class="form-select"><option value="">सभी polls</option>@foreach($polls as $poll)<option value="{{ $poll->id }}" @selected(($filters['poll_id'] ?? '') == $poll->id)>{{ $poll->title }}</option>@endforeach</select></div>
+            <div class="col-md-2"><label class="form-label">जिला</label><select name="district" id="reportDistrict" class="form-select"><option value="">सभी जिले</option>@foreach($districts as $district)<option value="{{ $district }}" @selected(($filters['district'] ?? '') === $district)>{{ $district }}</option>@endforeach</select></div>
+            <div class="col-md-3"><label class="form-label">विधानसभा</label><select name="seat_id" id="reportSeat" class="form-select"><option value="">सभी विधानसभा</option>@foreach($seats as $seat)<option value="{{ $seat->id }}" data-district="{{ $seat->district }}" @selected(($filters['seat_id'] ?? '') == $seat->id)>{{ $seat->seat_number }} - {{ $seat->seat_name }} ({{ $seat->district }})</option>@endforeach</select></div>
+            <div class="col-md-2"><label class="form-label">नाम</label><input type="search" name="name" value="{{ $filters['name'] ?? '' }}" class="form-control" placeholder="नाम खोजें"></div>
+            <div class="col-md-2"><label class="form-label">मोबाइल</label><input type="search" name="mobile" value="{{ $filters['mobile'] ?? '' }}" class="form-control" placeholder="मोबाइल खोजें"></div>
+            <div class="col-md-2"><label class="form-label">From date</label><input type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}" class="form-control"></div>
+            <div class="col-md-2"><label class="form-label">To date</label><input type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}" class="form-control"></div>
+            <div class="col-md-8 d-flex align-items-end gap-2"><button class="btn btn-primary">रिपोर्ट दिखाएँ</button><a class="btn btn-outline-secondary" href="{{ route('admin.poll.results') }}">फ़िल्टर हटाएँ</a></div>
+        </form>
+    </div></div>
+
+    <div class="card mb-4"><div class="card-header"><h5 class="mb-0">विधानसभा-wise ग्राफ</h5></div><div class="card-body"><canvas id="pollSeatChart" height="100"></canvas></div></div>
+
     <div class="card mb-4"><div class="card-header"><h5 class="mb-0">पोल मैनेज करें</h5></div><div class="table-responsive">
         <table class="table table-hover mb-0"><thead><tr><th>Title</th><th>सवाल</th><th>Responses</th><th>Status</th><th>Actions</th></tr></thead><tbody>
         @forelse($polls as $poll)
@@ -48,6 +63,16 @@
         </tbody></table>
     </div></div>
 
+    <div class="card mb-4"><div class="card-header"><h5 class="mb-0">Respondent details ({{ $respondents->total() }})</h5></div><div class="table-responsive">
+        <table class="table table-hover mb-0"><thead><tr><th>नाम</th><th>मोबाइल</th><th>जिला</th><th>विधानसभा</th><th>Poll</th><th>Submitted</th></tr></thead><tbody>
+        @forelse($respondents as $respondent)
+            <tr><td>{{ $respondent->respondent_name ?? '-' }}</td><td>{{ $respondent->respondent_mobile ?? '-' }}</td><td>{{ $respondent->seat->district ?? '-' }}</td><td>{{ $respondent->seat->seat_name ?? '-' }}</td><td>{{ $respondent->poll->title ?? '-' }}</td><td>{{ optional($respondent->created_at)->format('d-m-Y H:i') }}</td></tr>
+        @empty
+            <tr><td colspan="6" class="text-center py-4">इस filter में कोई respondent नहीं मिला।</td></tr>
+        @endforelse
+        </tbody></table>
+    </div><div class="card-footer">{{ $respondents->links() }}</div></div>
+
     <div class="card"><div class="card-header"><h5 class="mb-0">वोट रिपोर्ट</h5></div><div class="table-responsive">
         <table class="table table-striped mb-0"><thead><tr><th>Poll</th><th>Seat</th><th>Question</th><th>Option</th><th>Votes</th><th>प्रतिशत</th></tr></thead><tbody>
         @forelse($results->flatten() as $result)
@@ -58,4 +83,27 @@
         </tbody></table>
     </div></div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const districtFilter = document.getElementById('reportDistrict');
+    const seatFilter = document.getElementById('reportSeat');
+    const selectedSeat = @json($filters['seat_id'] ?? '');
+    function filterReportSeats() {
+        const district = districtFilter.value;
+        Array.from(seatFilter.options).forEach((option, index) => {
+            if (index === 0) return;
+            option.hidden = Boolean(district && option.dataset.district !== district);
+        });
+        if (seatFilter.selectedOptions[0]?.hidden) seatFilter.value = '';
+    }
+    districtFilter?.addEventListener('change', filterReportSeats);
+    filterReportSeats();
+    if (selectedSeat) seatFilter.value = selectedSeat;
+
+    new Chart(document.getElementById('pollSeatChart'), {
+        type: 'bar',
+        data: { labels: @json($chartData['labels']), datasets: [{ label: 'Unique respondents', data: @json($chartData['values']), backgroundColor: '#2563eb', borderRadius: 5 }] },
+        options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } }
+    });
+</script>
 @endsection
